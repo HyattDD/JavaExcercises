@@ -1,3 +1,5 @@
+
+/*Copy the content of file A to file B */
 import java.io.*;
 public class Copy {
     public static void main(String[] args) throws IOException {
