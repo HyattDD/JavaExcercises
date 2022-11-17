@@ -23,5 +23,6 @@ public class TCPServer {
         }
         serverSocket.close();
         socket.close();
+        System.out.println("File is received successfully.");
     }
 }
