@@ -21,25 +21,28 @@ public class kokit {
         boolean initSuccess = false;
         // can't use kokit in .kokit directory
         String prePath = System.getProperty("user.dir");
-        if (prePath.contains(".git")) {
+        if (prePath.contains(".kokit")) {
             System.out.println("Kokit can't be used recursively.");
             return initSuccess;
         }
         // initialize when fresh, otherwise reinitialize
         File file = new File(".kokit/objects");
-        if (file.exists() && !file.isDirectory()) {
-            initSuccess = file.mkdir();
+        // if a file dotKokit exists, delete it and renitialized
+        File dotKokit = new File(".kokit");
+        if (!file.exists() || !file.isDirectory()) {
+            dotKokit.delete();
+            initSuccess = file.mkdirs();
             if (initSuccess) {
                 System.out.println("Initialized empty Kokit repository in " 
-                + file.getAbsolutePath());
+                + prePath);
                 return initSuccess;
             }
         } else {
             file.delete();
-            initSuccess = file.mkdir();
+            initSuccess = file.mkdirs();
             if (initSuccess) {
                 System.out.println("Reinitialized empty Kokit repository in " 
-                + file.getAbsolutePath());
+                + prePath);
                 return initSuccess;
             }
         }
