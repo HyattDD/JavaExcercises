@@ -11,15 +11,21 @@ import java.security.MessageDigest;
 
 
 public class kokit {
-    
     public static void main(String[] args) {
-        if (args[0].equals("init")) gitInit();
-        if (args[0].equals("add"))  {
-            if (args[1].equals(".")) gitAddAll(System.getProperty("user.dir"));
-            else gitAdd(args[1], System.getProperty("user.dir"));
+        try {
+            if (args[0].equals("init")) gitInit();
+            else if (args[0].equals("add")) {
+                if (args[1].equals(".")) gitAddAll(System.getProperty("user.dir"));
+                else gitAdd(args[1], System.getProperty("user.dir"));
+            }
+            else if (args[0].equals("commit")) gitCommit(args[1], args[2]);
+            else if (args[0].equals("--help")) gitHelp();
+            else {
+                System.out.println("git: " + args[0] + "is not a git command. See 'kokit --help' ");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
-        if (args[0].equals("commit")) gitCommit(args[1], args[2]);
-        if (args[0].equals("--help")) gitHelp();
     }
 
     // kokit init
@@ -33,17 +39,20 @@ public class kokit {
         }
         // initialize when fresh, otherwise reinitialize
         File objDir = new File(prePath + "/.kokit/objects");
+        File logsDir = new File(prePath + "/.kokit/logs");
         File indexFile = new File(prePath +"/.kokit/index");
+        File headFile = new File(prePath + "/.kokit/logs/HEAD");
         // if a file dotKokit exists, delete it and renitialized
         File dotKokit = new File(prePath + "/" + ".kokit");
         if (!dotKokit.exists() || !dotKokit.isDirectory()) {
-            initSuccess = objDir.mkdirs();
             try (
                 ObjectOutputStream output = 
                 new ObjectOutputStream(new FileOutputStream(indexFile))
             ) {
+                initSuccess = objDir.mkdirs() && logsDir.mkdirs();
                 Index index = new Index();
                 output.writeObject(index);
+                headFile.createNewFile();
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -58,9 +67,10 @@ public class kokit {
                 ObjectOutputStream output = 
                 new ObjectOutputStream(new FileOutputStream(indexFile))
             ) {
-                initSuccess = objDir.mkdirs();
+                initSuccess = objDir.mkdirs() && logsDir.mkdirs();
                 Index index = new Index();
                 output.writeObject(index);
+                headFile.createNewFile();
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -104,13 +114,19 @@ public class kokit {
         }
     }
 
-
-    // #TODO : git commit
     // kokit commit (-m "notes")
-    public static void gitCommit(String option1, String option2) {
-        if (!option1.equals("-m")) {
-            System.out.println(option1 + " is not supported by koki-git.");
+    public static void gitCommit(String opString01, String opString02) throws Exception {
+        if (!opString01.equals("-m")) {
+            System.out.println("use 'kokit commit -m ···' and try again.");
         }
+        String prePath = System.getProperty("user.dir");
+        String indexPath = getDotGitpath(prePath) + "/index";
+
+        String lastCommitId = "";
+        String commitId = generateTree(indexPath);
+        String message = opString02;
+        String time = String.valueOf(System.currentTimeMillis());
+        generateCommit(lastCommitId, commitId, message, time);
     }
 
     // kokit --help
@@ -140,8 +156,73 @@ public class kokit {
             new Blob(content, getOccupyOfByteArray(content), hashtext);
             output.writeObject(blob);
             System.out.println("DEBUG: Object blob has been written down in objects directory ->" + fileName);
+            
+        } 
+    }
+
+    // update index file when git add
+    public static void updateIndex(String fileName, String prePath, String dotGitPath) {
+        try (
+            FileInputStream file = new FileInputStream(dotGitPath + "/index");
+        ) {
+            Index index = (Index) new ObjectInputStream(file).readObject();
+            String hashText = getHashOfFile(prePath + "/" +fileName);
+            index.set(fileName, hashText);
+            // System.out.println(index.getValue(fileName));
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
+
+    // generate tree object when commit
+    public static String generateTree(String indexPath) throws Exception{
+        
+        FileInputStream file = new FileInputStream(indexPath);
+        Index index = (Index) new ObjectInputStream(file).readObject();
+        Tree tree = new Tree();
+        tree.getIndex(index.getMap());
+
+        String indexContent = index.getContent();
+        String hashText = getHashOfByteArray(indexContent.getBytes());
+
+        File treeDir = new File(getObjPath(indexPath) + "/" + hashText.substring(0, 2));
+        treeDir.mkdir();
+        File desfile = new File(treeDir + "/" + hashText.substring(2, 40));
+        ObjectOutputStream output = 
+        new ObjectOutputStream(new FileOutputStream(desfile));
+        output.writeObject(tree);
+
+        file.close();
+        output.close();
+
+        System.out.println("DEBUG: Object tree has been written down in objects directory");
+        return hashText.substring(2, 40);
+    }
+
+    // generate commit object when commit
+    public static void generateCommit(String lastCommitId, String commitId, String message, String time) throws Exception {
+        Commit commit = new Commit(lastCommitId, commitId, message, time);
+        String content = commit.toString();
+        String prePath = System.getProperty("user.dir");
+        String objPath = getObjPath(prePath);
+        String hashText = getHashOfByteArray(content.getBytes());
+        File commitDir = new File(objPath + hashText.substring(0, 2));
+        commitDir.mkdir();
+        File desfile = new File(commitDir + "/" + hashText.substring(2, 40));
+
+        try (
+            ObjectOutputStream output = 
+            new ObjectOutputStream(new FileOutputStream(desfile))
+        ) {
+            output.writeObject(commit);
+            System.out.println("DEBUG: Commit has been written down in objects directory ");
+        } 
+    }
+
 
     // get SHA-1 hash value of byte[]
     public static String getHashOfByteArray(byte[] content) throws Exception{
@@ -183,6 +264,8 @@ public class kokit {
     public static Boolean findDir(String dirName, String path) {
         boolean find = false;
         File dir = new File(path);
+        // if dir is not directory, return false
+        if (dir.isFile()) return find;
         File[] files = dir.listFiles();
         for (File f : files) {
             if (f.isDirectory()) {
@@ -190,7 +273,7 @@ public class kokit {
                     find = true;
                     break;
                 } else {
-                    find = findDir(dirName, f.getName() + "/");
+                    find = findDir(dirName, f.getAbsolutePath());
                 }
             }
         }
@@ -239,6 +322,7 @@ public class kokit {
 
     // get dotGitPath #TODO
     public static String getDotGitpath(String prePath) {
+        // System.out.println("prePath in getDotGitpath: " + prePath);
         String res = new String();
         File file = new File(prePath);
         if (findDir(".kokit", prePath)) {
@@ -250,6 +334,12 @@ public class kokit {
             System.out.println("fatal: not a git repository (or any of the parent directories): .kokit");
         }
         return res;
+    }
+
+    // get objects path
+    public static String getObjPath(String prePath) {
+        // System.out.println("prePath in getObjPath: " + prePath);
+        return getDotGitpath(prePath) + "/objects";
     }
 
     // delet all the files under the path, path should be absolute path
@@ -265,22 +355,6 @@ public class kokit {
         }
     }
 
-    // update index file when git add
-    public static void updateIndex(String fileName, String prePath, String dotGitPath) {
-        try (
-            FileInputStream file = new FileInputStream(dotGitPath + "/index");
-        ) {
-            Index index = (Index) new ObjectInputStream(file).readObject();
-            String hashText = getHashOfFile(prePath + "/" +fileName);
-            index.set(fileName, hashText);
-            // System.out.println(index.getValue(fileName));
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
+    
 
 }
