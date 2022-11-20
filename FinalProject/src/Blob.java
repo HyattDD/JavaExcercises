@@ -1,37 +1,53 @@
 import java.io.Serializable;
 
 public class Blob implements Serializable{
-    private String type;
-    private int size;
-    private String content;
+    private static final long serialVersionUID = 134252411453L;
 
-    public Blob(String info) {
-        this.content = info;
-        this.type = "String";
+    private String hash;
+    private int length;
+    private byte[] content;
+
+    public Blob(byte[] content, int length, String hash) {
+        this.content = content;
+        this.length = length;
+        this.hash = hash;
     }
 
-    public String getType() {
-        return type;
+    public static long getSerialversionuid() {
+        return serialVersionUID;
     }
 
-    public void setType(String type) {
-        this.type = type;
+    public String getHash() {
+        return hash;
     }
 
-    public int getSize() {
-        return size;
+    public void setHash(String hash) {
+        this.hash = hash;
     }
 
-    public void setSize(int size) {
-        this.size = size;
+    public long getLength() {
+        return length;
     }
 
-    public String getContent() {
+    public void setLength(int length) {
+        this.length = length;
+    }
+
+    public byte[] getContent() {
         return content;
     }
 
-    public void setContent(String content) {
+    public void setContent(byte[] content) {
         this.content = content;
     }
+
+    @Override
+    public String toString() {
+        return "Blob{" +
+                "content=" + new String(content) +
+                ", length=" + length +
+                ", hash='" + hash + '\'' +
+                '}';
+    }    
 }
 

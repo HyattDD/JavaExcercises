@@ -1,17 +1,23 @@
+import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.math.BigInteger;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 
 
 public class kokit {
     
     public static void main(String[] args) {
         if (args[0].equals("init")) gitInit();
-        if (args[0].equals("add")) gitAdd(args[1]);
+        if (args[0].equals("add"))  {
+            if (args[1].equals(".")) gitAddAll(System.getProperty("user.dir"));
+            else gitAdd(args[1], System.getProperty("user.dir"));
+        }
         if (args[0].equals("commit")) gitCommit(args[1], args[2]);
         if (args[0].equals("--help")) gitHelp();
     }
@@ -26,46 +32,80 @@ public class kokit {
             return initSuccess;
         }
         // initialize when fresh, otherwise reinitialize
-        File file = new File(".kokit/objects");
+        File objDir = new File(prePath + "/.kokit/objects");
+        File indexFile = new File(prePath +"/.kokit/index");
         // if a file dotKokit exists, delete it and renitialized
-        File dotKokit = new File(".kokit");
-        if (!file.exists() || !file.isDirectory()) {
-            dotKokit.delete();
-            initSuccess = file.mkdirs();
+        File dotKokit = new File(prePath + "/" + ".kokit");
+        if (!dotKokit.exists() || !dotKokit.isDirectory()) {
+            initSuccess = objDir.mkdirs();
+            try (
+                ObjectOutputStream output = 
+                new ObjectOutputStream(new FileOutputStream(indexFile))
+            ) {
+                Index index = new Index();
+                output.writeObject(index);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
             if (initSuccess) {
                 System.out.println("Initialized empty Kokit repository in " 
-                + prePath);
+                + prePath + "/.kokit");
                 return initSuccess;
             }
         } else {
-            file.delete();
-            initSuccess = file.mkdirs();
+            deleteFile(dotKokit.getAbsolutePath());
+            try (
+                ObjectOutputStream output = 
+                new ObjectOutputStream(new FileOutputStream(indexFile))
+            ) {
+                initSuccess = objDir.mkdirs();
+                Index index = new Index();
+                output.writeObject(index);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
             if (initSuccess) {
                 System.out.println("Reinitialized empty Kokit repository in " 
-                + prePath);
+                + prePath + "/.kokit");
                 return initSuccess;
             }
         }
         return initSuccess;
     }
 
-    // #TODO
     // kokit add
-    public static void gitAdd(String optionString) {
-        String path = System.getProperty("user.dir");
-        File preFile = new File(path);
-        preFile.getParent();
-        if (!findFile(optionString, path)) {
-            
+    public static void gitAdd(String fileName, String prePath) {
+        File file = new File(prePath + "/" + fileName);
+        if (!file.exists()) {
+            System.out.println("fatal: pathspec '" + fileName + "' did not match any files");
+            return;
         }
-        if (optionString.equals(".")) {
-            // add all
+        String dotGitpath = getDotGitpath(prePath);
+        try {
+            updateIndex(fileName, prePath, dotGitpath);
+            generateBlob(fileName, prePath, dotGitpath);
+        } catch (Exception e) {
+            e.printStackTrace();
         }
+    }
 
+    public static void gitAddAll(String prePath) {
+        // System.out.println("now user dir is:" + System.getProperty("user.dir"));
+        File preDir = new File(prePath);
+        File[] files = preDir.listFiles();
+        for (File f : files) {
+            if (f.isFile()) gitAdd(f.getName(), prePath);
+            if (f.isDirectory()) {
+                if(f.getName().equals(".kokit")) continue;
+                // System.out.println(prePath + "/" + f.getName());
+                String subPath = prePath + "/" + f.getName();
+                gitAddAll(subPath);
+            }
+        }
     }
 
 
-    // #TODO
+    // #TODO : git commit
     // kokit commit (-m "notes")
     public static void gitCommit(String option1, String option2) {
         if (!option1.equals("-m")) {
@@ -73,74 +113,174 @@ public class kokit {
         }
     }
 
-    // #TODO
     // kokit --help
     public static void gitHelp() {
-
+        System.out.println("HELP: ");
+        System.out.println("kokit init : init a local repository in present path.");
+        System.out.println("kokit add <filename> : add file to staging area.");
+        System.out.println("kokit add . : add all the files under the path to staging area");
     }
 
-    // #TODO
     // generate blob object and write in
-    public static void generateBlob(String input) throws IOException{
-        // 新建初始文件并写入内容
-        File file = new File("yourfile");
-        System.out.println("file03 has been made...");
+    public static void generateBlob(String fileName, String srcPath, String dotKokitPath) throws Exception{
+        System.out.println("DEBUG: generating blob of " + fileName);
+        byte[] content = readFileByBytes(srcPath + "/" + fileName);
+        // get SHA-1 value
+        String hashtext = getHashOfByteArray(content);
+        String objPath = new String(dotKokitPath + "/objects/");
+        File blobDir = new File(objPath + hashtext.substring(0, 2));
+        blobDir.mkdir();
+        System.out.println(blobDir);
+        File desfile = new File(blobDir + "/" + hashtext.substring(2, 40));
         try (
             ObjectOutputStream output = 
-            new ObjectOutputStream(new FileOutputStream(file))
+            new ObjectOutputStream(new FileOutputStream(desfile))
         ) {
-            Blob blob = new Blob(input);
-            blob.setType("String");
-            blob.setSize(input.length());
-            blob.setContent(makeSHA1(input));
+            Blob blob = 
+            new Blob(content, getOccupyOfByteArray(content), hashtext);
             output.writeObject(blob);
-            System.out.println("Object blob has been written to file03");
-        }
-
-        // 存储SHA-1值
-        String hashtext = makeSHA1(input);
-
-        // 修改文件名为SHA-1值
-        File renamedFile = new File("./" + hashtext);
-        file.renameTo(renamedFile);
-        System.out.println("yourfile has been renamed as: " + hashtext);
-    }
-
-    // generate SHA-1 value
-    public static String makeSHA1(String input) {
-        try {
-            // 根据文件内容产生SHA-1值
-            /*SHA-1算法以getInstance()的静态方法初始化。选择算法后计算消息摘要值，并将结果作为字节数组返回。 BigInteger类用于将结果字SHA-1为其符号表示。然后将该表示形式转换为十六进制格式，以获取预期的MessageDigest*/
-            MessageDigest md = MessageDigest.getInstance("SHA-1");
-            byte[] messageDigest = md.digest(input.getBytes());
-            BigInteger no = new BigInteger(1, messageDigest);
-            String hashtext = no.toString(16);
-            while (hashtext.length() < 32) {
-                hashtext = "0" + hashtext;
-            }
-            return hashtext;
-        }
-
-        // getInstance方法中是声明了NoSuchAlgorithmException异常，所以这里要捕获进行处理
-        catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
+            System.out.println("DEBUG: Object blob has been written down in objects directory ->" + fileName);
         }
     }
 
-    // check whether a file is exited in present path, recursively
-    public static Boolean findFile(String fileString, String path) {
+    // get SHA-1 hash value of byte[]
+    public static String getHashOfByteArray(byte[] content) throws Exception{
+        MessageDigest complete = MessageDigest.getInstance("SHA-1");
+        complete.update(content);
+        byte[] sha1 = complete.digest();
+        String hashValue = "";
+        for(int j = 0; j < sha1.length; j++) {
+            hashValue += Integer.toString((sha1[j] >> 4) & 0x0F, 16) 
+                      + Integer.toString(sha1[j] & 0x0F, 16);
+        }
+        return hashValue;
+    }
+
+    // get SHA-1 hash value of file
+    public static String getHashOfFile(String filePath) throws Exception {
+        byte[] content = readFileByBytes(filePath);
+        String hashtext = getHashOfByteArray(content);
+        return hashtext;
+    }
+
+    // check whether a file is under present path, recursively
+    public static Boolean findFile(String fileName, String path) {
         boolean find = false;
         File dir = new File(path);
         File[] files = dir.listFiles();
         for (File f : files) {
             if (f.isFile()) {
-                if (f.getName().equals(fileString)) find = true;
+                if (f.getName().equals(fileName)) find = true;
             }
             if (f.isDirectory()) {
-                find = findFile(fileString, f.getName() + "/");
+                find = findFile(fileName, f.getName() + "/");
             }
         }
         return find;
+    }
+
+    // check whether a dir exists in present path, recursively
+    public static Boolean findDir(String dirName, String path) {
+        boolean find = false;
+        File dir = new File(path);
+        File[] files = dir.listFiles();
+        for (File f : files) {
+            if (f.isDirectory()) {
+                if (f.getName().equals(dirName)) {
+                    find = true;
+                    break;
+                } else {
+                    find = findDir(dirName, f.getName() + "/");
+                }
+            }
+        }
+        return find;
+    }
+
+    // read file content and return to string
+    public static String readFileByString(String filename) throws IOException{
+        FileInputStream fis = new FileInputStream(filename);
+        byte[] buffer = new byte[10];
+        StringBuilder sb = new StringBuilder();
+        while (fis.read(buffer) != -1) {
+            sb.append(new String(buffer));
+            buffer = new byte[10];
+        }
+        fis.close();
+        String content = sb.toString();
+        return content;
+    }
+
+    // read file content and return to byte[]
+    public static byte[] readFileByBytes(String fileName) throws IOException {
+		try (
+            InputStream in = 
+            new BufferedInputStream(new FileInputStream(fileName)); 
+			ByteArrayOutputStream out = 
+            new ByteArrayOutputStream();
+        ) {
+			byte[] tempbytes = new byte[in.available()];
+			for (int i = 0; (i = in.read(tempbytes)) != -1;) {
+				out.write(tempbytes, 0, i);
+			}
+			return out.toByteArray();
+		}
+	}
+
+    // get the actual length of byte[]
+    public static int getOccupyOfByteArray(byte[] data) {
+        int len = 0;
+        for (int i = 0; i < data.length; i++) {
+            if (data[i] == '\0') break;
+            else len ++;
+        }
+        return len;
+    }
+
+    // get dotGitPath #TODO
+    public static String getDotGitpath(String prePath) {
+        String res = new String();
+        File file = new File(prePath);
+        if (findDir(".kokit", prePath)) {
+            return (prePath + "/.kokit");
+        } else {
+            res = getDotGitpath(file.getParent());
+        }
+        if (res.isEmpty()) {
+            System.out.println("fatal: not a git repository (or any of the parent directories): .kokit");
+        }
+        return res;
+    }
+
+    // delet all the files under the path, path should be absolute path
+    public static void deleteFile(String prePath) {
+        File preFile = new File(prePath);
+        File[] files = preFile.listFiles();
+        for (File f : files) {
+            if (f.isFile()) f.delete();
+            if (f.isDirectory()) {
+                deleteFile(f.getAbsolutePath());
+                f.delete();
+            }
+        }
+    }
+
+    // update index file when git add
+    public static void updateIndex(String fileName, String prePath, String dotGitPath) {
+        try (
+            FileInputStream file = new FileInputStream(dotGitPath + "/index");
+        ) {
+            Index index = (Index) new ObjectInputStream(file).readObject();
+            String hashText = getHashOfFile(prePath + "/" +fileName);
+            index.set(fileName, hashText);
+            // System.out.println(index.getValue(fileName));
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
 }
