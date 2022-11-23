@@ -5,6 +5,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.security.MessageDigest;
 import java.util.Scanner;
@@ -102,7 +103,30 @@ public class MyUtil {
         return initSuccess;
     }
 
-    /*---------------------file\dir operating--------------------- */
+
+    /*-------------------------corgit add----------------------------- */
+    //TODO
+    public static boolean checkFileInIndex(String filePath) {
+        boolean inIndex = false;
+        return inIndex;
+    }
+    //TODO
+    public static void removeFileInIndex(String filePath) {
+
+    }
+
+    // use to show index file content
+    public static void showIndex(String prePath) throws Exception{
+        String sep = File.separator;
+        String indexPath = getDotCorgitPath(prePath) + sep + "index";
+        FileInputStream fis = new FileInputStream(indexPath);
+        Index index = (Index) new ObjectInputStream(fis).readObject();
+        index.listItems();
+        fis.close();
+    }
+
+
+    /*-----------------------file\dir operating----------------------- */
 
     // delet all the files under a path, path should be absolute path
     public static void deleteFile(String prePath) {

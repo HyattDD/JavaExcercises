@@ -1,25 +1,27 @@
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-
 
 public class corgit {
     public static void main(String[] args) {
         try {
+            String prePath = System.getProperty("user.dir");
             // jump to different options
             if (args[0].equals("init")) {
                 corgitInit();
             } else if (args[0].equals("add")) {
                 if (args[1].equals(".")) {
-                    corgitAddAll(System.getProperty("user.dir"));
-                } else corgitAdd(args[1]);
+                    corgitAddAll(prePath);
+                } else corgitAdd(args[1], prePath);
             } else if (args[0].equals("commit")) {
                 gitCommit(args[1], args[2]);
             } else if (args[0].equals("--help")) {
                 gitHelp();
+            } else if (args[0].equals("ls-files") && 
+                       args[1].equals("--stage")) {
+                corgitListIndex(prePath);
             }
             // corgit help
             else {
@@ -44,43 +46,36 @@ public class corgit {
         } else return MyUtil.initCorgit();
     }
 
+
     // corgit add
-    public static void corgitAdd(String fileName) {
-        String prePath = System.getProperty("user.dir");
+    public static boolean corgitAdd(String fileName, String prePath) {
+        boolean addSuccess = false;
         String sep = File.separator;
         File file = new File(prePath + sep + fileName);
-        if (!file.exists()) {
-            System.out.println("fatal: pathspec '" + fileName + "' did not match any files");
-            return;
+        if (file.isDirectory()) {
+            return corgitAddAll(file.getAbsolutePath());
         }
-        String dotGitpath = MyUtil.getDotCorgitPath(prePath);
+        if (!file.exists()) {
+            // check whether this file's record exsits in Index file, if so, remove it
+            if (MyUtil.checkFileInIndex(file.getAbsolutePath())) {
+                MyUtil.removeFileInIndex(file.getAbsolutePath());
+            } else {
+                System.out.println("fatal: pathspec '" + 
+                fileName + "' did not match any files");
+            }
+        }
         try {
-            updateIndex(fileName, prePath, dotGitpath);
-            generateBlob(fileName, prePath, dotGitpath);
+            updateIndex(fileName, prePath);
+            generateBlob(fileName, prePath);
+            addSuccess = true;
         } catch (Exception e) {
             e.printStackTrace();
         }
+        return addSuccess;
     }
 
-    // function overload, just for being called in addAll, because
-    public static void corgitAdd(String fileName, String prePath) {
-        String sep = File.separator;
-        File file = new File(prePath + sep + fileName);
-        if (!file.exists()) {
-            System.out.println("fatal: pathspec '" + fileName + "' did not match any files");
-            return;
-        }
-        String dotGitpath = MyUtil.getDotCorgitPath(prePath);
-        try {
-            updateIndex(fileName, prePath, dotGitpath);
-            generateBlob(fileName, prePath, dotGitpath);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    public static void corgitAddAll(String prePath) {
-        // System.out.println("now user dir is:" + System.getProperty("user.dir"));
+    public static boolean corgitAddAll(String prePath) {
+        boolean addSuccess = false;
         String sep = File.separator;
         File preDir = new File(prePath);
         File[] files = preDir.listFiles();
@@ -93,6 +88,8 @@ public class corgit {
                 corgitAddAll(subPath);
             }
         }
+        addSuccess = true;
+        return addSuccess;
     }
 
     // corgit commit (-m "notes")
@@ -113,12 +110,13 @@ public class corgit {
 
 
     // generate blob object and write in
-    public static void generateBlob(String fileName, String srcPath, String dotcorgitPath) throws Exception{
+    public static void generateBlob(String fileName, String srcPath) throws Exception{
+        String dotCorgitPath = MyUtil.getDotCorgitPath(srcPath);
         System.out.println("DEBUG: generating blob of " + fileName);
         byte[] content = MyUtil.readFileByBytes(srcPath + "/" + fileName);
         // get SHA-1 value
         String hashtext = MyUtil.getHashOfByteArray(content);
-        String objPath = new String(dotcorgitPath + "/objects/");
+        String objPath = new String(dotCorgitPath + "/objects/");
         File blobDir = new File(objPath + hashtext.substring(0, 2));
         blobDir.mkdir();
         System.out.println(blobDir);
@@ -136,18 +134,15 @@ public class corgit {
     }
 
     // update index file when git add
-    public static void updateIndex(String fileName, String prePath, String dotGitPath) {
+    public static void updateIndex(String fileName, String prePath) {
+        String dotCorgitPath = MyUtil.getDotCorgitPath(prePath);
         try (
-            FileInputStream file = new FileInputStream(dotGitPath + "/index");
+            FileInputStream file = new FileInputStream(dotCorgitPath + "/index");
         ) {
             Index index = (Index) new ObjectInputStream(file).readObject();
             String hashText = MyUtil.getHashOfFile(prePath + "/" +fileName);
-            index.set(fileName, hashText);
+            index.setItem(fileName, hashText);
             // System.out.println(index.getValue(fileName));
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -174,7 +169,7 @@ public class corgit {
         file.close();
         output.close();
 
-        System.out.println("DEBUG: Object tree has been written down in objects directory");
+        System.out.println("DEBUG: Object tree has been written down in objects directory\n");
         return hashText.substring(2, 40);
     }
 
@@ -194,25 +189,22 @@ public class corgit {
             new ObjectOutputStream(new FileOutputStream(desfile))
         ) {
             output.writeObject(commit);
-            System.out.println("DEBUG: Commit has been written down in objects directory ");
+            System.out.println("DEBUG: Commit has been written down in objects directory \n");
         } 
     }
-
-
-
-
-
-
-
-
-
-
-
-
 
     // corgit --help
     public static void gitHelp() {
         MyUtil.printHelpDoc();
+    }
+
+    // corgit ls-files --staged
+    public static void corgitListIndex(String prePath) {
+        try {
+            MyUtil.showIndex(prePath);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
 
