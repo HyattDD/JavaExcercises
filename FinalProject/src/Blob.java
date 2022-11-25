@@ -4,7 +4,7 @@ public class Blob implements Serializable{
     /* Why use serialVersionUID ?
     SerialVersionUID is an ID which is stamped on object when it get serialized usually hashcode of object, you can use tool serialver to see serialVersionUID of a serialized object . SerialVersionUID is used for version control of object. you can specify serialVersionUID in your class file also. Consequence of not specifying serialVersionUID is that when you add or modify any field in class then already serialized class will not be able to recover because serialVersionUID generated for new class and for old serialized object will be different. Java serialization process relies on correct serialVersionUID for recovering state of serialized object and throws java.io.InvalidClassException in case of serialVersionUID mismatch. 
     */
-    private static final long serialVersionUID = 134252411453L;
+    private static final long serialVersionUID = 111222411453L;
 
     private String hash;
     private int length;

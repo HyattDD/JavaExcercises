@@ -10,9 +10,15 @@ import java.io.ObjectOutputStream;
 import java.security.MessageDigest;
 import java.util.Scanner;
 
+
 public class MyUtil {
 
     /*--------------------init operations----------------- */
+    // check whether the present path has been initialized, every time we
+    // use a corgit instructor, we need to check it
+    public static boolean checkInitialized(String prepath) {
+        return true;
+    }
 
     // check whether present path is under .corgit dir
     public static boolean checkPathInDotCorgit() {
@@ -105,24 +111,168 @@ public class MyUtil {
 
 
     /*-------------------------corgit add----------------------------- */
-    //TODO
-    public static boolean checkFileInIndex(String filePath) {
+
+    public static boolean checkFileInIndex(String fileName, String prePath) {
         boolean inIndex = false;
+        String sep = File.separator;
+        String indexPath = getDotCorgitPath(prePath) + sep + "index";
+        String fileRelativePath = getFileRelativePath(fileName, prePath);
+        System.out.println("fileRP in checkFileInIndex is : " + fileRelativePath);
+        // deserialization operation
+        try (FileInputStream fis = new FileInputStream(indexPath)) {
+            Index index = (Index) new ObjectInputStream(fis).readObject();
+            inIndex = index.findItem(fileRelativePath);
+            // if index item contians a fileName but no item equals the name
+            // that means the filename is actually a dirName, and there are 
+            // files in this dir are stored in index file 
+            inIndex = index.containFileName(fileRelativePath);
+        } catch (ClassNotFoundException | IOException e) {
+            e.printStackTrace();
+        }
         return inIndex;
     }
-    //TODO
-    public static void removeFileInIndex(String filePath) {
+    public static boolean removeFileInIndex(String fileName, String prePath) {
+        boolean remove = false;
+        String sep = File.separator;
+        String indexPath = getDotCorgitPath(prePath) + sep + "index";
+        String fileRelativePath = getFileRelativePath(fileName, prePath);
+        System.out.println("fRP is : " + fileRelativePath);
+        try {
+            FileInputStream fis = new FileInputStream(indexPath);
+            ObjectInputStream ois = new ObjectInputStream(fis);
+            Index index = (Index) ois.readObject();
+            index.removeItem(fileRelativePath);
 
+            ois.close();
+            // write object after modified, important!!!
+            FileOutputStream fos = new FileOutputStream(indexPath);
+            ObjectOutputStream oos = new ObjectOutputStream(fos);
+            oos.writeObject(index);
+            oos.close();
+
+            remove = true;
+        } catch (ClassNotFoundException | IOException e) {
+            e.printStackTrace();
+        }
+        return remove;
     }
 
     // use to show index file content
     public static void showIndex(String prePath) throws Exception{
         String sep = File.separator;
         String indexPath = getDotCorgitPath(prePath) + sep + "index";
-        FileInputStream fis = new FileInputStream(indexPath);
-        Index index = (Index) new ObjectInputStream(fis).readObject();
+        // this function dose not modify index object, so there is no need to write back
+        ObjectInputStream ois = new ObjectInputStream(new FileInputStream(indexPath));
+        Index index = (Index) ois.readObject();
         index.listItems();
-        fis.close();
+        ois.close();
+    }
+
+    // while we use add all, or we add a dir contains file that was deleted,
+    // we should check whether some items need to de removed in index file
+    public static boolean removeFileDeletedInIndex(String prePath) {
+        boolean removeSuccess = false;
+        String sep = File.separator;
+        String indexPath = getIndexFilePath(prePath);
+        // read object and modify it
+        try {
+            FileInputStream fis = new FileInputStream(indexPath);
+            ObjectInputStream ois = new ObjectInputStream(fis);
+            Index index = (Index) ois.readObject();
+            String[] indexItemKeys = index.getKeys();
+            for (String key : indexItemKeys) {
+                File file = new File(prePath + sep + key);
+                String relPathOfPrePath = getFileRelativePath("", prePath);
+                if (key.contains(relPathOfPrePath) && !file.exists()) {
+                    //#TODO
+                    index.removeItem(key);
+                }
+            }
+            ois.close();
+            // write object after modified, important!!!
+            FileOutputStream fos = new FileOutputStream(indexPath);
+            ObjectOutputStream oos = new ObjectOutputStream(fos);
+            oos.writeObject(index);
+            oos.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return removeSuccess;
+    }
+
+    // update index file when git add
+    public static boolean addToIndex(String fileName, String prePath) {
+        System.out.println("Debug: generating index file of" + fileName);
+
+        boolean addSuccess = false;
+        String sep = File.separator;
+        String filePath = prePath + sep + fileName;
+        String indexPath = getIndexFilePath(prePath);
+
+        // index store relative path, so get it
+        String fileRelativePath = getFileRelativePath(fileName, prePath);
+
+        try {
+            // read object and modify it
+            FileInputStream fis = new FileInputStream(indexPath);
+            ObjectInputStream ois = new ObjectInputStream(fis);
+            Index index = (Index) ois.readObject();
+            String hashText = MyUtil.getHashOfFile(filePath);
+            index.setItem(fileRelativePath, hashText);
+            ois.close();
+
+            // write object after modified, important!!!
+            FileOutputStream fos = new FileOutputStream(indexPath);
+            ObjectOutputStream oos = new ObjectOutputStream(fos);
+            oos.writeObject(index);
+            oos.close();
+
+            //#BUG
+            System.out.println("index file has been written. \n");
+
+            addSuccess = true;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return addSuccess;
+    }
+
+    public static Boolean generateBlob(String fileName, String prePath) {
+        boolean genSuccess = false;
+        String sep = File.separator;
+        String filePath = prePath + sep + fileName;
+        String dotCorgitPath = MyUtil.getDotCorgitPath(prePath);
+        String objPath = dotCorgitPath + sep + "objects";
+
+        //#BUG
+        System.out.println("DEBUG: generating blob of " + fileName);
+
+        // read file to bytes
+        byte[] content = MyUtil.readFileByBytes(filePath);
+        // get SHA-1 value
+        String hashtext = MyUtil.getHashOfByteArray(content);
+        File blobDir = new File(objPath + sep + hashtext.substring(0, 2));
+        blobDir.mkdir();
+        System.out.println(blobDir);//#BUG
+        File blobFile = new File(blobDir + sep + hashtext.substring(2, 40));
+
+        try (
+            ObjectOutputStream output = 
+            new ObjectOutputStream(new FileOutputStream(blobFile))
+        ) {
+            Blob blob = 
+            new Blob(content, MyUtil.getOccupyOfByteArray(content), hashtext);
+            output.writeObject(blob);
+
+            //#BUG
+            System.out.println("DEBUG: Object blob has been written down in objects directory ->" + fileName +'\n');
+
+            genSuccess = true;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return genSuccess;
     }
 
 
@@ -173,7 +323,8 @@ public class MyUtil {
     }
 
     // read file content and return to byte[]
-    public static byte[] readFileByBytes(String fileName) throws IOException {
+    public static byte[] readFileByBytes(String fileName) {
+        byte[] resBytes = null;
         try (
             InputStream in = 
             new BufferedInputStream(new FileInputStream(fileName)); 
@@ -184,16 +335,21 @@ public class MyUtil {
             for (int i = 0; (i = in.read(tempbytes)) != -1;) {
                 out.write(tempbytes, 0, i);
             }
-            return out.toByteArray();
+            resBytes = out.toByteArray();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
+        return resBytes;
     }
 
     // check whether a dir exists in present path, recursively
     public static Boolean findDir(String dirName, String path) {
+        // System.out.println("find dir in :" + path); #BUG
         boolean find = false;
         File dir = new File(path);
         // if dir is not directory, return false
         if (dir.isFile()) return find;
+        if (!dir.exists()) return find;
         File[] files = dir.listFiles();
         for (File f : files) {
             if (f.isDirectory()) {
@@ -211,14 +367,18 @@ public class MyUtil {
     /*------------------generate hashvalue SHA-1------------------- */
     
     // get SHA-1 hash value of byte[]
-    public static String getHashOfByteArray(byte[] content) throws Exception{
-        MessageDigest complete = MessageDigest.getInstance("SHA-1");
-        complete.update(content);
-        byte[] sha1 = complete.digest();
+    public static String getHashOfByteArray(byte[] content) {
         String hashValue = "";
-        for(int j = 0; j < sha1.length; j++) {
-            hashValue += Integer.toString((sha1[j] >> 4) & 0x0F, 16) 
-                      + Integer.toString(sha1[j] & 0x0F, 16);
+        try {
+            MessageDigest complete = MessageDigest.getInstance("SHA-1");
+            complete.update(content);
+            byte[] sha1 = complete.digest();
+            for(int j = 0; j < sha1.length; j++) {
+                hashValue += Integer.toString((sha1[j] >> 4) & 0x0F, 16) 
+                          + Integer.toString(sha1[j] & 0x0F, 16);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
         return hashValue;
     }
@@ -233,13 +393,14 @@ public class MyUtil {
 
     /*------------------path searching operations-------------------*/
 
-    // get dotCrogitPath 
+    // get dotCorgitPath 
     public static String getDotCorgitPath(String prePath) {
-        // System.out.println("prePath in getDotCorgitPath: " + prePath);
+        // System.out.println("prePath in getDotCorgitPath: " + prePath);#BUG
+        String sep = File.separator;
         String res = new String();
         File file = new File(prePath);
         if (findDir(".corgit", prePath)) {
-            return (prePath + "/.corgit");
+            return (prePath + sep + ".corgit");
         } else {
             res = getDotCorgitPath(file.getParent());
         }
@@ -253,6 +414,36 @@ public class MyUtil {
     public static String getObjPath(String prePath) {
         // System.out.println("prePath in getObjPath: " + prePath);
         return getDotCorgitPath(prePath) + "/objects";
+    }
+
+    // get file's relative path to corgit repository
+    public static String getFileRelativePath(String fileName, String prePath) {
+        String sep = File.separator;
+        String filePath = prePath + sep + fileName;
+        // because prepath is always exists, so getDotCorgit uses prepath
+        // System.out.println("pre path in getFileRP : " + prePath);#BUG
+        String dotCorgitPath = MyUtil.getDotCorgitPath(prePath);
+        File dotCorgit = new File(dotCorgitPath);
+        String rootPath = dotCorgit.getParent();
+        // get relative path
+        String fileRelativePath = filePath.replace(rootPath + sep, "");
+        return fileRelativePath;
+    }
+
+    // get the root path of a corgit repository
+    public static String getRootPathOfCorigitRepo(String prePath) {
+        String dotCorgitPath = MyUtil.getDotCorgitPath(prePath);
+        File dotCorgit = new File(dotCorgitPath);
+        String rootPath = dotCorgit.getParent(); 
+        return rootPath;
+    }
+
+    // get the path where index file exists
+    public static String getIndexFilePath(String prePath) {
+        String sep = File.separator;
+        String dotCorgitPath = MyUtil.getDotCorgitPath(prePath);
+        String indexPath = dotCorgitPath + sep + "index";
+        return indexPath;
     }
 
     /*-----------------beautification operations----------------------*/

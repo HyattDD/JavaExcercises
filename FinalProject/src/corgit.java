@@ -49,27 +49,31 @@ public class corgit {
 
     // corgit add
     public static boolean corgitAdd(String fileName, String prePath) {
+        // check initialized
+        if (!MyUtil.checkInitialized(prePath)) {
+            System.out.println("fatal: not a corgit repository (or any of the parent directories): .git");
+            return false;
+        }
         boolean addSuccess = false;
         String sep = File.separator;
-        File file = new File(prePath + sep + fileName);
-        if (file.isDirectory()) {
-            return corgitAddAll(file.getAbsolutePath());
-        }
-        if (!file.exists()) {
-            // check whether this file's record exsits in Index file, if so, remove it
-            if (MyUtil.checkFileInIndex(file.getAbsolutePath())) {
-                MyUtil.removeFileInIndex(file.getAbsolutePath());
+        String filePath = prePath + sep +fileName;
+        File file = new File(filePath);
+        if (file.exists()) {
+            if (file.isFile()) {
+                addSuccess = MyUtil.addToIndex(fileName, prePath);
+                addSuccess = MyUtil.generateBlob(fileName, prePath);
+            } else if (file.isDirectory()) {
+                corgitAddAll(file.getAbsolutePath());
+            }
+        } else if (!file.exists()) {//#TODO
+            // notice: since file does not exsit, filePath may not be a real path
+            if (MyUtil.checkFileInIndex(fileName, prePath)) {
+                addSuccess = MyUtil.removeFileInIndex(fileName, prePath);
+                addSuccess = MyUtil.removeFileDeletedInIndex(prePath + sep + fileName);
             } else {
                 System.out.println("fatal: pathspec '" + 
                 fileName + "' did not match any files");
             }
-        }
-        try {
-            updateIndex(fileName, prePath);
-            generateBlob(fileName, prePath);
-            addSuccess = true;
-        } catch (Exception e) {
-            e.printStackTrace();
         }
         return addSuccess;
     }
@@ -79,6 +83,9 @@ public class corgit {
         String sep = File.separator;
         File preDir = new File(prePath);
         File[] files = preDir.listFiles();
+        //#TODO
+        // if some files were deleted in this dir, remove their items in index file
+        addSuccess = MyUtil.removeFileDeletedInIndex(prePath);
         for (File f : files) {
             if (f.isFile()) corgitAdd(f.getName(), prePath);
             if (f.isDirectory()) {
@@ -109,29 +116,7 @@ public class corgit {
 
 
 
-    // generate blob object and write in
-    public static void generateBlob(String fileName, String srcPath) throws Exception{
-        String dotCorgitPath = MyUtil.getDotCorgitPath(srcPath);
-        System.out.println("DEBUG: generating blob of " + fileName);
-        byte[] content = MyUtil.readFileByBytes(srcPath + "/" + fileName);
-        // get SHA-1 value
-        String hashtext = MyUtil.getHashOfByteArray(content);
-        String objPath = new String(dotCorgitPath + "/objects/");
-        File blobDir = new File(objPath + hashtext.substring(0, 2));
-        blobDir.mkdir();
-        System.out.println(blobDir);
-        File desfile = new File(blobDir + "/" + hashtext.substring(2, 40));
-        try (
-            ObjectOutputStream output = 
-            new ObjectOutputStream(new FileOutputStream(desfile))
-        ) {
-            Blob blob = 
-            new Blob(content, MyUtil.getOccupyOfByteArray(content), hashtext);
-            output.writeObject(blob);
-            System.out.println("DEBUG: Object blob has been written down in objects directory ->" + fileName);
-            
-        } 
-    }
+
 
     // update index file when git add
     public static void updateIndex(String fileName, String prePath) {
@@ -156,7 +141,7 @@ public class corgit {
         Tree tree = new Tree();
         tree.getIndex(index.getMap());
 
-        String indexContent = index.getContent();
+        String indexContent = index.toString();
         String hashText = MyUtil.getHashOfByteArray(indexContent.getBytes());
 
         File treeDir = new File(MyUtil.getObjPath(indexPath) + "/" + hashText.substring(0, 2));
@@ -206,7 +191,4 @@ public class corgit {
             e.printStackTrace();
         }
     }
-
-
-
 }
