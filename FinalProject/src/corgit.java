@@ -3,6 +3,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.util.ArrayList;
 
 public class corgit {
     public static void main(String[] args) {
@@ -16,7 +17,7 @@ public class corgit {
                     corgitAddAll(prePath);
                 } else corgitAdd(args[1], prePath);
             } else if (args[0].equals("commit")) {
-                gitCommit(args[1], args[2]);
+                corgitCommit(args[1], args[2], prePath);
             } else if (args[0].equals("--help")) {
                 gitHelp();
             } else if (args[0].equals("ls-files") && 
@@ -100,74 +101,102 @@ public class corgit {
     }
 
     // corgit commit (-m "notes")
-    public static void gitCommit(String opString01, String opString02) throws Exception {
+    public static boolean corgitCommit(String opString01, String opString02, String prePath) throws Exception {
+        // check initialized
+        if (!MyUtil.checkInitialized(prePath)) {
+            System.out.println("fatal: not a corgit repository (or any of the parent directories): .git");
+            return false;
+        }
+        // check input format
         if (!opString01.equals("-m")) {
             System.out.println("use 'corgit commit -m ···' and try again.");
         }
-        String prePath = System.getProperty("user.dir");
-        String indexPath = MyUtil.getDotCorgitPath(prePath) + "/index";
+        // do commit, read Head file and change it 
+        boolean commitSuccess = false;
+        String headPath = MyUtil.getHeadFilePath(prePath);
+        FileInputStream fis = new FileInputStream(headPath);
+        // System.out.println(headPath);
+        ObjectInputStream ois = new ObjectInputStream(fis);
+        Head head = (Head) ois.readObject();
 
-        String lastCommitId = "";
-        String commitId = generateTree(indexPath);
+        String lastCommitId = head.getCommitId();
+        String commitId = generateTree();
         String message = opString02;
         String time = String.valueOf(System.currentTimeMillis());
+
+        // update headFile
+        commitSuccess = MyUtil.updateHead(commitId);
         generateCommit(lastCommitId, commitId, message, time);
+        ois.close();
+        return commitSuccess;
     }
 
-
-
-
-
-    // update index file when git add
-    public static void updateIndex(String fileName, String prePath) {
-        String dotCorgitPath = MyUtil.getDotCorgitPath(prePath);
-        try (
-            FileInputStream file = new FileInputStream(dotCorgitPath + "/index");
-        ) {
-            Index index = (Index) new ObjectInputStream(file).readObject();
-            String hashText = MyUtil.getHashOfFile(prePath + "/" +fileName);
-            index.setItem(fileName, hashText);
-            // System.out.println(index.getValue(fileName));
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
 
     // generate tree object when commit
-    public static String generateTree(String indexPath) throws Exception{
-        
+    public static String generateTree() throws Exception{
+
+        // read out index file to get the files information
+        String indexPath = MyUtil.getIndexFilePath(System.getProperty("user.dir"));
         FileInputStream file = new FileInputStream(indexPath);
-        Index index = (Index) new ObjectInputStream(file).readObject();
-        Tree tree = new Tree();
-        tree.getIndex(index.getMap());
+        ObjectInputStream ois = new ObjectInputStream(file);
+        Index index = (Index) ois.readObject();
 
-        String indexContent = index.toString();
-        String hashText = MyUtil.getHashOfByteArray(indexContent.getBytes());
+        String sep = File.separator;
+        String[] indexItems = index.getKeys();
+        ArrayList<String[]> als = new ArrayList<>();
 
-        File treeDir = new File(MyUtil.getObjPath(indexPath) + "/" + hashText.substring(0, 2));
-        treeDir.mkdir();
-        File desfile = new File(treeDir + "/" + hashText.substring(2, 40));
-        ObjectOutputStream output = 
-        new ObjectOutputStream(new FileOutputStream(desfile));
-        output.writeObject(tree);
-
-        file.close();
-        output.close();
-
+        for (String item : indexItems) {
+            als.add(item.split(sep));
+        }
+        int maxLayNumber = 0;
+        for (String[] strArr : als) {
+            maxLayNumber = Math.max(maxLayNumber, strArr.length);
+        }
+        
+        int countNumber = maxLayNumber -1;
+        String commitId = "";
+        while (countNumber >= 0) {
+            Tree tree = new Tree();
+            for (String[] strArr : als) {
+                if (countNumber == strArr.length) {
+                    tree.addBlob(strArr[countNumber], index.getValue(strArr[countNumber]));
+                    if (countNumber == 0) {
+                        tree.setTreeName("root");
+                    } else {
+                        tree.setTreeName(strArr[countNumber - 1]);
+                    }
+                } else if (strArr.length > countNumber){
+                    tree.addTree(strArr[countNumber], index.getValue(strArr[countNumber]));
+                } else continue;
+            }
+            
+            String treeHash = tree.getTreeHash();
+            if (countNumber == 0) {
+                commitId = treeHash;
+            }
+            String objPath = MyUtil.getObjPath(System.getProperty("user.dir"));
+            FileOutputStream fos = new FileOutputStream(objPath + sep + treeHash);
+            ObjectOutputStream oos = new ObjectOutputStream(fos);
+            oos.writeObject(tree);
+            oos.close();
+            countNumber --;
+        }
+        ois.close();
         System.out.println("DEBUG: Object tree has been written down in objects directory\n");
-        return hashText.substring(2, 40);
+        return commitId;
     }
 
     // generate commit object when commit
     public static void generateCommit(String lastCommitId, String commitId, String message, String time) throws Exception {
         Commit commit = new Commit(lastCommitId, commitId, message, time);
+        String sep = File.separator;
         String content = commit.toString();
         String prePath = System.getProperty("user.dir");
         String objPath = MyUtil.getObjPath(prePath);
         String hashText = MyUtil.getHashOfByteArray(content.getBytes());
-        File commitDir = new File(objPath + hashText.substring(0, 2));
+        File commitDir = new File(objPath + sep + hashText.substring(0, 2));
         commitDir.mkdir();
-        File desfile = new File(commitDir + "/" + hashText.substring(2, 40));
+        File desfile = new File(commitDir + sep + hashText.substring(2, 40));
 
         try (
             ObjectOutputStream output = 

@@ -36,6 +36,10 @@ public class Index implements Serializable {
         return keys; 
     }
 
+    public int getKeysNumber() {
+        return getKeys().length;
+    }
+
     public void listItems() {
         if (indexMap.isEmpty()) {
             System.out.println("Nothing in index");

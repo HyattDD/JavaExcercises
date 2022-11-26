@@ -1,53 +1,55 @@
 import java.io.Serializable;
+import java.security.MessageDigest;
 
-public class Blob implements Serializable{
-    /* Why use serialVersionUID ?
-    SerialVersionUID is an ID which is stamped on object when it get serialized usually hashcode of object, you can use tool serialver to see serialVersionUID of a serialized object . SerialVersionUID is used for version control of object. you can specify serialVersionUID in your class file also. Consequence of not specifying serialVersionUID is that when you add or modify any field in class then already serialized class will not be able to recover because serialVersionUID generated for new class and for old serialized object will be different. Java serialization process relies on correct serialVersionUID for recovering state of serialized object and throws java.io.InvalidClassException in case of serialVersionUID mismatch. 
-    */
-    private static final long serialVersionUID = 111222411453L;
+public class Blob implements Serializable {
+    /*
+     * Why use serialVersionUID ?
+     * SerialVersionUID is an ID which is stamped on object when it get serialized
+     * usually hashcode of object, you can use tool serialver to see
+     * serialVersionUID of a serialized object .
+     */
+    private static final long serialVersionUID = 117822411453L;
 
-    private String hash;
-    private int length;
+    // blob just store the content's value of file content
+    private String hashValueOfFileContent;
+    private int lengthOfContent;
+    // the content in blob is in byte[] content, rather than string
     private byte[] content;
 
-    public Blob(byte[] content, int length, String hash) {
+    // consturct a blob just need file's content
+    public Blob(byte[] content) {
         this.content = content;
-        this.length = length;
-        this.hash = hash;
+        this.lengthOfContent = content.length;
+        this.hashValueOfFileContent = MyUtil.getHashOfByteArray(content);
     }
 
-    public static long getSerialversionuid() {
-        return serialVersionUID;
+    // print the content of origin file content
+    public void printContent() {
+        System.out.println(this.content.toString());
     }
 
-    public String getHash() {
-        return hash;
+    // get SHA-1 hash value of byte[]
+    public static String getHashOfByteArray(byte[] content) {
+        String hashValue = "";
+        try {
+            MessageDigest complete = MessageDigest.getInstance("SHA-1");
+            complete.update(content);
+            byte[] sha1 = complete.digest();
+            // the main algorithm
+            for (int j = 0; j < sha1.length; j++) {
+                hashValue += Integer.toString((sha1[j] >> 4) & 0x0F, 16)
+                        + Integer.toString(sha1[j] & 0x0F, 16);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return hashValue;
     }
 
-    public void setHash(String hash) {
-        this.hash = hash;
-    }
-
-    public long getLength() {
-        return length;
-    }
-
-    public void setLength(int length) {
-        this.length = length;
-    }
-
-    public byte[] getContent() {
-        return content;
-    }
-
-    public void setContent(byte[] content) {
-        this.content = content;
-    }
-
+    // override the tostring function, so that we can use many blob to generate
+    // a tree sha-1 value, and then use the tree-hashvalue to generate commitId
     @Override
     public String toString() {
-        return "Blob{" + "content=" + new String(content) + ", length=" + length +
-                ", hash='" + hash + '\'' + '}';
-    }    
+        return "Blob" + " " + lengthOfContent + " " + hashValueOfFileContent;
+    }
 }
-

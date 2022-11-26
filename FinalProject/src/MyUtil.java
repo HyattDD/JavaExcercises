@@ -53,8 +53,8 @@ public class MyUtil {
         String sep = File.separator;
         File dotcorgit = new File(prePath + sep + ".corgit");
         File objDir = new File(dotcorgit.getAbsolutePath()+ sep + "objects");
-        File logsDir = new File(dotcorgit.getAbsolutePath() + sep + "logs");
-        File headFile = new File(logsDir.getAbsolutePath() + sep + "HEAD");
+        // File logsDir = new File(dotcorgit.getAbsolutePath() + sep + "logs");
+        File headFile = new File(dotcorgit.getAbsolutePath() + sep + "HEAD");
         File indexFile = new File(dotcorgit.getAbsolutePath() + sep + "index");
 
         // check : if there is no file or dir called ".corgit", then init
@@ -62,7 +62,7 @@ public class MyUtil {
         // if choose 'y', delete it and renitialized, otherwise return false
         if (!dotcorgit.exists() || !dotcorgit.isDirectory()) {
             // create dirs first, so that the FileOutPutStream can find path
-            initSuccess = objDir.mkdirs() && logsDir.mkdirs();
+            initSuccess = objDir.mkdirs();
             try (
                 ObjectOutputStream output = 
                 new ObjectOutputStream(new FileOutputStream(indexFile))
@@ -70,10 +70,20 @@ public class MyUtil {
                 Index index = new Index();
                 output.writeObject(index);
                 // init success only when all files and dirs are made
-                initSuccess = headFile.createNewFile();
             } catch (IOException e) {
                 e.printStackTrace();
                 System.out.println("Fualts were made when index file is creating.");
+            }
+            try (
+                ObjectOutputStream output = 
+                new ObjectOutputStream(new FileOutputStream(headFile))
+            ) {
+                Head head = new Head("");
+                output.writeObject(head);
+                initSuccess = true;
+            } catch (Exception e) {
+                e.printStackTrace();
+                System.out.println("Faults were made when head file is creating.");
             }
             // if init success, print out notes
             if (initSuccess) {
@@ -91,13 +101,23 @@ public class MyUtil {
                 ObjectOutputStream output = 
                 new ObjectOutputStream(new FileOutputStream(indexFile))
             ) {
-                initSuccess = objDir.mkdirs() && logsDir.mkdirs();
+                initSuccess = objDir.mkdirs();
                 Index index = new Index();
                 // write empty index file 
                 output.writeObject(index);
-                headFile.createNewFile();
             } catch (IOException e) {
                 e.printStackTrace();
+            }
+            try (
+                ObjectOutputStream output = 
+                new ObjectOutputStream(new FileOutputStream(headFile))
+            ) {
+                Head head = new Head("");
+                output.writeObject(head);
+                initSuccess = true;
+            } catch (Exception e) {
+                e.printStackTrace();
+                System.out.println("Faults were made when head file is creating.");
             }
             if (initSuccess) {
                 System.out.println("Reinitialized empty corgit repository in " 
@@ -238,6 +258,24 @@ public class MyUtil {
         return addSuccess;
     }
 
+    // update head file, since head file just maintains one id, 
+    // there is no need to deserialize it and rewrite back, just overwrite it
+    public static boolean updateHead(String commitId) {
+        String headPath = getHeadFilePath(System.getProperty("user.dir"));
+        boolean updateHead = false;
+        Head head = new Head(commitId);
+        try (
+            ObjectOutputStream output = 
+            new ObjectOutputStream(new FileOutputStream(headPath));
+        ) {
+            output.writeObject(head);
+            updateHead = true;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return updateHead;
+    }
+
     public static Boolean generateBlob(String fileName, String prePath) {
         boolean genSuccess = false;
         String sep = File.separator;
@@ -262,7 +300,7 @@ public class MyUtil {
             new ObjectOutputStream(new FileOutputStream(blobFile))
         ) {
             Blob blob = 
-            new Blob(content, MyUtil.getOccupyOfByteArray(content), hashtext);
+            new Blob(content);
             output.writeObject(blob);
 
             //#BUG
@@ -444,6 +482,14 @@ public class MyUtil {
         String dotCorgitPath = MyUtil.getDotCorgitPath(prePath);
         String indexPath = dotCorgitPath + sep + "index";
         return indexPath;
+    }
+
+    // get the path where HEAD file exsits
+    public static String getHeadFilePath(String prePath) {
+        String sep = File.separator;
+        String dotCorgitPath = MyUtil.getDotCorgitPath(prePath);
+        String headPath = dotCorgitPath + sep + "HEAD";
+        return headPath;
     }
 
     /*-----------------beautification operations----------------------*/
