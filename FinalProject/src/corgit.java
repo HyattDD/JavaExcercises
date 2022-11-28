@@ -1,42 +1,59 @@
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.util.ArrayList;
 
 public class corgit {
     public static void main(String[] args) {
-        try {
-            String prePath = System.getProperty("user.dir");
-            // jump to different options
-            if (args[0].equals("init")) {
-                corgitInit();
-            } else if (args[0].equals("add")) {
-                if (args[1].equals(".")) {
-                    corgitAddAll(prePath);
-                } else corgitAdd(args[1], prePath);
-            } else if (args[0].equals("commit")) {
-                corgitCommit(args[1], args[2], prePath);
-            } else if (args[0].equals("--help")) {
-                gitHelp();
-            } else if (args[0].equals("ls-files") && 
-                       args[1].equals("--stage")) {
-                corgitListIndex(prePath);
-            }
-            // corgit help
-            else {
-                System.out.println("git: " + args[0] + "is not a git command. See 'corgit --help' ");
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
+        String curPath = System.getProperty("user.dir");
+        // jump to different options
+        // corgit init
+        if (args[0].equals("init") && args.length == 1) {
+            corgitInit();
+        // corgit add
+        } else if (args[0].equals("add") && args.length == 2) {
+            if (args[1].equals(".")) {
+                corgitAddAll(curPath);
+            } else corgitAdd(args[1], curPath);
+        // corgit commit
+        } else if (args[0].equals("commit") && args.length == 3) {
+            corgitCommit(args[1], args[2], curPath);
+        // corgit --help
+        } else if (args[0].equals("--help") && args.length == 1) {
+            corgitHelp();
+        // corgit ls-files --stage
+        } else if (args[0].equals("ls-files") && 
+                   args[1].equals("--stage") && args.length == 2) {
+            corgitListIndex(curPath);
+        // corgit ls-head
+        } else if (args[0].equals("ls-head") && args.length == 1) {
+            corgitShowHead(curPath);
+        // corgit rm --cached / rm fileName /rm -r dir
+        } else if (args[0].equals("rm")) {
+            if (args[1].equals("--cached") && 
+            (args.length == 3)) {
+                corgitRmCache(args[2], curPath);
+            } else if (args[1].equals("-r") && 
+            (args.length == 3)) {
+                corgitRmDir(args[2], curPath);
+            } else if (args.length == 2 &&
+            !args[1].equals("--cached") && !args[1].equals("-r"))
+             corgitRmFile(args[1], curPath);
+             else MyUtil.wrongFormat(args);
+        // corgit log
+        } else if (args[0].equals("log") && args.length == 1) {
+            corgitLog(curPath);
+        }
+        // wrong instruction, show help
+        else {
+            MyUtil.wrongFormat(args);
         }
     }
 
     // corgit init
     public static boolean corgitInit() {
         boolean initSuccess = false;
-        /* check whether in .corgit path 
+        /* 
+        check whether in .corgit path 
         - if in , fail to init and return
         - if not , check whether present path had been initialized before
             - if yes, reinitialized and make dir .corgit clean
@@ -49,28 +66,28 @@ public class corgit {
 
 
     // corgit add
-    public static boolean corgitAdd(String fileName, String prePath) {
+    public static boolean corgitAdd(String fileName, String curPath) {
         // check initialized
-        if (!MyUtil.checkInitialized(prePath)) {
+        if (!MyUtil.checkInitialized(curPath)) {
             System.out.println("fatal: not a corgit repository (or any of the parent directories): .git");
             return false;
         }
         boolean addSuccess = false;
         String sep = File.separator;
-        String filePath = prePath + sep +fileName;
+        String filePath = curPath + sep +fileName;
         File file = new File(filePath);
         if (file.exists()) {
             if (file.isFile()) {
-                addSuccess = MyUtil.addToIndex(fileName, prePath);
-                addSuccess = MyUtil.generateBlob(fileName, prePath);
+                addSuccess = MyUtil.addToIndex(fileName, curPath);
+                addSuccess = MyUtil.generateBlob(fileName, curPath);
             } else if (file.isDirectory()) {
                 corgitAddAll(file.getAbsolutePath());
             }
         } else if (!file.exists()) {//#TODO
             // notice: since file does not exsit, filePath may not be a real path
-            if (MyUtil.checkFileInIndex(fileName, prePath)) {
-                addSuccess = MyUtil.removeFileInIndex(fileName, prePath);
-                addSuccess = MyUtil.removeFileDeletedInIndex(prePath + sep + fileName);
+            if (MyUtil.checkFileInIndex(fileName, curPath)) {
+                addSuccess = MyUtil.removeFileInIndex(fileName, curPath);
+                addSuccess = MyUtil.removeFileDeletedInIndex(curPath + sep + fileName);
             } else {
                 System.out.println("fatal: pathspec '" + 
                 fileName + "' did not match any files");
@@ -79,20 +96,20 @@ public class corgit {
         return addSuccess;
     }
 
-    public static boolean corgitAddAll(String prePath) {
+    public static boolean corgitAddAll(String curPath) {
         boolean addSuccess = false;
         String sep = File.separator;
-        File preDir = new File(prePath);
+        File preDir = new File(curPath);
         File[] files = preDir.listFiles();
         //#TODO
         // if some files were deleted in this dir, remove their items in index file
-        addSuccess = MyUtil.removeFileDeletedInIndex(prePath);
+        addSuccess = MyUtil.removeFileDeletedInIndex(curPath);
         for (File f : files) {
-            if (f.isFile()) corgitAdd(f.getName(), prePath);
+            if (f.isFile()) corgitAdd(f.getName(), curPath);
             if (f.isDirectory()) {
                 if(f.getName().equals(".corgit")) continue;
-                // System.out.println(prePath + "/" + f.getName());
-                String subPath = prePath + sep + f.getName();
+                // System.out.println(curPath + "/" + f.getName());
+                String subPath = curPath + sep + f.getName();
                 corgitAddAll(subPath);
             }
         }
@@ -101,9 +118,9 @@ public class corgit {
     }
 
     // corgit commit (-m "notes")
-    public static boolean corgitCommit(String opString01, String opString02, String prePath) throws Exception {
+    public static boolean corgitCommit(String opString01, String opString02, String curPath) {
         // check initialized
-        if (!MyUtil.checkInitialized(prePath)) {
+        if (!MyUtil.checkInitialized(curPath)) {
             System.out.println("fatal: not a corgit repository (or any of the parent directories): .git");
             return false;
         }
@@ -111,113 +128,79 @@ public class corgit {
         if (!opString01.equals("-m")) {
             System.out.println("use 'corgit commit -m ···' and try again.");
         }
-        // do commit, read Head file and change it 
         boolean commitSuccess = false;
-        String headPath = MyUtil.getHeadFilePath(prePath);
-        FileInputStream fis = new FileInputStream(headPath);
-        // System.out.println(headPath);
-        ObjectInputStream ois = new ObjectInputStream(fis);
-        Head head = (Head) ois.readObject();
+        try {
+            // do commit, read Head file and change it 
+            String headPath = MyUtil.getHeadFilePath(curPath);
+            FileInputStream fis = new FileInputStream(headPath);
+            // System.out.println(headPath);
+            ObjectInputStream ois = new ObjectInputStream(fis);
+            Head head = (Head) ois.readObject();
 
-        String lastCommitId = head.getCommitId();
-        String commitId = generateTree();
-        String message = opString02;
-        String time = String.valueOf(System.currentTimeMillis());
+            String lastCommitId = head.getCommitId();
+            String commitId = MyUtil.generateTree();
+            String message = opString02;
+            String time = String.valueOf(System.currentTimeMillis());
 
-        // update headFile
-        commitSuccess = MyUtil.updateHead(commitId);
-        generateCommit(lastCommitId, commitId, message, time);
-        ois.close();
+            // update headFile
+            commitSuccess = MyUtil.updateHead(commitId);
+            MyUtil.generateCommit(lastCommitId, commitId, message, time);
+            ois.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         return commitSuccess;
     }
 
 
-    // generate tree object when commit
-    public static String generateTree() throws Exception{
 
-        // read out index file to get the files information
-        String indexPath = MyUtil.getIndexFilePath(System.getProperty("user.dir"));
-        FileInputStream file = new FileInputStream(indexPath);
-        ObjectInputStream ois = new ObjectInputStream(file);
-        Index index = (Index) ois.readObject();
-
-        String sep = File.separator;
-        String[] indexItems = index.getKeys();
-        ArrayList<String[]> als = new ArrayList<>();
-
-        for (String item : indexItems) {
-            als.add(item.split(sep));
-        }
-        int maxLayNumber = 0;
-        for (String[] strArr : als) {
-            maxLayNumber = Math.max(maxLayNumber, strArr.length);
-        }
-        
-        int countNumber = maxLayNumber -1;
-        String commitId = "";
-        while (countNumber >= 0) {
-            Tree tree = new Tree();
-            for (String[] strArr : als) {
-                if (countNumber == strArr.length) {
-                    tree.addBlob(strArr[countNumber], index.getValue(strArr[countNumber]));
-                    if (countNumber == 0) {
-                        tree.setTreeName("root");
-                    } else {
-                        tree.setTreeName(strArr[countNumber - 1]);
-                    }
-                } else if (strArr.length > countNumber){
-                    tree.addTree(strArr[countNumber], index.getValue(strArr[countNumber]));
-                } else continue;
-            }
-            
-            String treeHash = tree.getTreeHash();
-            if (countNumber == 0) {
-                commitId = treeHash;
-            }
-            String objPath = MyUtil.getObjPath(System.getProperty("user.dir"));
-            FileOutputStream fos = new FileOutputStream(objPath + sep + treeHash);
-            ObjectOutputStream oos = new ObjectOutputStream(fos);
-            oos.writeObject(tree);
-            oos.close();
-            countNumber --;
-        }
-        ois.close();
-        System.out.println("DEBUG: Object tree has been written down in objects directory\n");
-        return commitId;
-    }
-
-    // generate commit object when commit
-    public static void generateCommit(String lastCommitId, String commitId, String message, String time) throws Exception {
-        Commit commit = new Commit(lastCommitId, commitId, message, time);
-        String sep = File.separator;
-        String content = commit.toString();
-        String prePath = System.getProperty("user.dir");
-        String objPath = MyUtil.getObjPath(prePath);
-        String hashText = MyUtil.getHashOfByteArray(content.getBytes());
-        File commitDir = new File(objPath + sep + hashText.substring(0, 2));
-        commitDir.mkdir();
-        File desfile = new File(commitDir + sep + hashText.substring(2, 40));
-
-        try (
-            ObjectOutputStream output = 
-            new ObjectOutputStream(new FileOutputStream(desfile))
-        ) {
-            output.writeObject(commit);
-            System.out.println("DEBUG: Commit has been written down in objects directory \n");
-        } 
-    }
 
     // corgit --help
-    public static void gitHelp() {
+    public static void corgitHelp() {
         MyUtil.printHelpDoc();
     }
 
     // corgit ls-files --staged
-    public static void corgitListIndex(String prePath) {
+    public static void corgitListIndex(String curPath) {
         try {
-            MyUtil.showIndex(prePath);
+            MyUtil.showIndex(curPath);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
+
+    // print the content of head
+    public static void corgitShowHead(String curPath) {
+        try {
+            MyUtil.showHead(curPath);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // delete file information in staged area
+    public static void corgitRmCache(String fileName, String curPath) {
+        if (fileName.equals(null)) {
+            corgitHelp();
+            return;
+        } else {
+            MyUtil.deleteToIndex(fileName, curPath);
+        }
+    }
+
+    //
+    public static void corgitRmFile(String fileName, String curPath) {
+
+    }
+    // 
+    public static void corgitRmDir(String dirName, String curPath) {
+
+    }
+
+    //
+    public static void corgitLog(String curPath) {
+        
+    }
+
 }

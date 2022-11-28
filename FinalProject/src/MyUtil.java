@@ -8,6 +8,7 @@ import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.security.MessageDigest;
+import java.util.ArrayList;
 import java.util.Scanner;
 
 
@@ -16,7 +17,7 @@ public class MyUtil {
     /*--------------------init operations----------------- */
     // check whether the present path has been initialized, every time we
     // use a corgit instructor, we need to check it
-    public static boolean checkInitialized(String prepath) {
+    public static boolean checkInitialized(String curPath) {
         return true;
     }
 
@@ -24,8 +25,8 @@ public class MyUtil {
     public static boolean checkPathInDotCorgit() {
         boolean pathIncorgit = false;
         // can't use corgit in .corgit directory
-        String prePath = System.getProperty("user.dir");
-        if (prePath.contains(".corgit")) {
+        String curPath = System.getProperty("user.dir");
+        if (curPath.contains(".corgit")) {
             System.out.println("corgit can't be used recursively. " + 
             "Please check you workspace.");
             pathIncorgit = true;
@@ -49,9 +50,9 @@ public class MyUtil {
     public static boolean initCorgit() {
         boolean initSuccess = false;
         // prepare all the dirs and files for initializing
-        String prePath = System.getProperty("user.dir");
+        String curPath = System.getProperty("user.dir");
         String sep = File.separator;
-        File dotcorgit = new File(prePath + sep + ".corgit");
+        File dotcorgit = new File(curPath + sep + ".corgit");
         File objDir = new File(dotcorgit.getAbsolutePath()+ sep + "objects");
         // File logsDir = new File(dotcorgit.getAbsolutePath() + sep + "logs");
         File headFile = new File(dotcorgit.getAbsolutePath() + sep + "HEAD");
@@ -88,7 +89,7 @@ public class MyUtil {
             // if init success, print out notes
             if (initSuccess) {
                 System.out.println("Initialized empty corgit repository in " 
-                + prePath + "/.corgit");
+                + curPath + "/.corgit");
                 MyUtil.printLogo();
                 return initSuccess;
             }
@@ -121,7 +122,7 @@ public class MyUtil {
             }
             if (initSuccess) {
                 System.out.println("Reinitialized empty corgit repository in " 
-                + prePath + "/.corgit");
+                + curPath + "/.corgit");
                 MyUtil.printLogo();
                 return initSuccess;
             }
@@ -132,11 +133,11 @@ public class MyUtil {
 
     /*-------------------------corgit add----------------------------- */
 
-    public static boolean checkFileInIndex(String fileName, String prePath) {
+    public static boolean checkFileInIndex(String fileName, String curPath) {
         boolean inIndex = false;
         String sep = File.separator;
-        String indexPath = getDotCorgitPath(prePath) + sep + "index";
-        String fileRelativePath = getFileRelativePath(fileName, prePath);
+        String indexPath = getDotCorgitPath(curPath) + sep + "index";
+        String fileRelativePath = getFileRelativePath(fileName, curPath);
         System.out.println("fileRP in checkFileInIndex is : " + fileRelativePath);
         // deserialization operation
         try (FileInputStream fis = new FileInputStream(indexPath)) {
@@ -151,11 +152,11 @@ public class MyUtil {
         }
         return inIndex;
     }
-    public static boolean removeFileInIndex(String fileName, String prePath) {
+    public static boolean removeFileInIndex(String fileName, String curPath) {
         boolean remove = false;
         String sep = File.separator;
-        String indexPath = getDotCorgitPath(prePath) + sep + "index";
-        String fileRelativePath = getFileRelativePath(fileName, prePath);
+        String indexPath = getDotCorgitPath(curPath) + sep + "index";
+        String fileRelativePath = getFileRelativePath(fileName, curPath);
         System.out.println("fRP is : " + fileRelativePath);
         try {
             FileInputStream fis = new FileInputStream(indexPath);
@@ -178,9 +179,9 @@ public class MyUtil {
     }
 
     // use to show index file content
-    public static void showIndex(String prePath) throws Exception{
+    public static void showIndex(String curPath) throws Exception{
         String sep = File.separator;
-        String indexPath = getDotCorgitPath(prePath) + sep + "index";
+        String indexPath = getDotCorgitPath(curPath) + sep + "index";
         // this function dose not modify index object, so there is no need to write back
         ObjectInputStream ois = new ObjectInputStream(new FileInputStream(indexPath));
         Index index = (Index) ois.readObject();
@@ -188,12 +189,23 @@ public class MyUtil {
         ois.close();
     }
 
+    // use to show head file content
+    public static void showHead(String curPath) throws Exception{
+        String sep = File.separator;
+        String headPath = getDotCorgitPath(curPath) + sep + "HEAD";
+        // this function dose not modify index object, so there is no need to write back
+        ObjectInputStream ois = new ObjectInputStream(new FileInputStream(headPath));
+        Head head = (Head) ois.readObject();
+        System.out.println(head.getCommitId());
+        ois.close();
+    }
+
     // while we use add all, or we add a dir contains file that was deleted,
     // we should check whether some items need to de removed in index file
-    public static boolean removeFileDeletedInIndex(String prePath) {
+    public static boolean removeFileDeletedInIndex(String curPath) {
         boolean removeSuccess = false;
         String sep = File.separator;
-        String indexPath = getIndexFilePath(prePath);
+        String indexPath = getIndexFilePath(curPath);
         // read object and modify it
         try {
             FileInputStream fis = new FileInputStream(indexPath);
@@ -201,9 +213,9 @@ public class MyUtil {
             Index index = (Index) ois.readObject();
             String[] indexItemKeys = index.getKeys();
             for (String key : indexItemKeys) {
-                File file = new File(prePath + sep + key);
-                String relPathOfPrePath = getFileRelativePath("", prePath);
-                if (key.contains(relPathOfPrePath) && !file.exists()) {
+                File file = new File(curPath + sep + key);
+                String relPathOfcurPath = getFileRelativePath("", curPath);
+                if (key.contains(relPathOfcurPath) && !file.exists()) {
                     //#TODO
                     index.removeItem(key);
                 }
@@ -221,16 +233,16 @@ public class MyUtil {
     }
 
     // update index file when git add
-    public static boolean addToIndex(String fileName, String prePath) {
+    public static boolean addToIndex(String fileName, String curPath) {
         System.out.println("Debug: generating index file of" + fileName);
 
         boolean addSuccess = false;
         String sep = File.separator;
-        String filePath = prePath + sep + fileName;
-        String indexPath = getIndexFilePath(prePath);
+        String filePath = curPath + sep + fileName;
+        String indexPath = getIndexFilePath(curPath);
 
         // index store relative path, so get it
-        String fileRelativePath = getFileRelativePath(fileName, prePath);
+        String fileRelativePath = getFileRelativePath(fileName, curPath);
 
         try {
             // read object and modify it
@@ -258,6 +270,34 @@ public class MyUtil {
         return addSuccess;
     }
 
+    // delete index item
+    public static boolean deleteToIndex(String fileName, String curPath) {
+        boolean deleteSuccess = false;
+        String relativePath = MyUtil.getFileRelativePath(fileName, curPath);
+        String indexPath = MyUtil.getIndexFilePath(curPath);
+        try {
+            // read object and modify it
+            FileInputStream fis = new FileInputStream(indexPath);
+            ObjectInputStream ois = new ObjectInputStream(fis);
+            Index index = (Index) ois.readObject();
+            index.removeItem(relativePath);
+            ois.close();
+
+            // write object after modified, important!!!
+            FileOutputStream fos = new FileOutputStream(indexPath);
+            ObjectOutputStream oos = new ObjectOutputStream(fos);
+            oos.writeObject(index);
+            oos.close();
+
+            //#BUG
+            System.out.println("index file has been deleted. \n");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return deleteSuccess;
+    }
+
+
     // update head file, since head file just maintains one id, 
     // there is no need to deserialize it and rewrite back, just overwrite it
     public static boolean updateHead(String commitId) {
@@ -276,11 +316,11 @@ public class MyUtil {
         return updateHead;
     }
 
-    public static Boolean generateBlob(String fileName, String prePath) {
+    public static Boolean generateBlob(String fileName, String curPath) {
         boolean genSuccess = false;
         String sep = File.separator;
-        String filePath = prePath + sep + fileName;
-        String dotCorgitPath = MyUtil.getDotCorgitPath(prePath);
+        String filePath = curPath + sep + fileName;
+        String dotCorgitPath = MyUtil.getDotCorgitPath(curPath);
         String objPath = dotCorgitPath + sep + "objects";
 
         //#BUG
@@ -299,8 +339,7 @@ public class MyUtil {
             ObjectOutputStream output = 
             new ObjectOutputStream(new FileOutputStream(blobFile))
         ) {
-            Blob blob = 
-            new Blob(content);
+            Blob blob = new Blob(content);
             output.writeObject(blob);
 
             //#BUG
@@ -313,12 +352,91 @@ public class MyUtil {
         return genSuccess;
     }
 
+    // generate tree object when commit
+    public static String generateTree() throws Exception{
+
+            // read out index file to get the files information
+            String indexPath = MyUtil.getIndexFilePath(System.getProperty("user.dir"));
+            FileInputStream file = new FileInputStream(indexPath);
+            ObjectInputStream ois = new ObjectInputStream(file);
+            Index index = (Index) ois.readObject();
+    
+            String sep = File.separator;
+            String[] indexItems = index.getKeys();
+            ArrayList<String[]> als = new ArrayList<>();
+    
+            for (String item : indexItems) {
+                als.add(item.split(sep));
+            }
+            int maxLayNumber = 0;
+            for (String[] strArr : als) {
+                maxLayNumber = Math.max(maxLayNumber, strArr.length);
+            }
+            
+            int countNumber = maxLayNumber -1;
+            System.out.println(maxLayNumber);
+            String commitId = "";
+            while (countNumber >= 0) {
+                Tree tree = new Tree();
+                for (String[] strArr : als) {
+                    if (countNumber == strArr.length) {
+                        tree.addBlob(strArr[strArr.length - 1], index.getValue(strArr[strArr.length - 1]));
+                        if (countNumber == 0) {
+                            tree.setTreeName("root");
+                        } else {
+                            tree.setTreeName(strArr[countNumber - 1]);
+                        }
+                    } else if (strArr.length > countNumber){
+                        tree.addTree(strArr[countNumber], index.getValue(strArr[countNumber]));
+                    } else continue;
+                }
+                
+                String treeHash = tree.getTreeHash();
+                if (countNumber == 0) {
+                    commitId = treeHash;
+                }
+                String objPath = MyUtil.getObjPath(System.getProperty("user.dir"));
+                File treeDir = new File(objPath + sep + treeHash.substring(0, 2));
+                treeDir.mkdir();
+                File treeFile = new File(treeDir + sep + treeHash.substring(2, 40));
+                FileOutputStream fos = new FileOutputStream(treeFile);
+                ObjectOutputStream oos = new ObjectOutputStream(fos);
+                oos.writeObject(tree);
+                oos.close();
+                countNumber --;
+            }
+            ois.close();
+            System.out.println("DEBUG: Object tree has been written down in objects directory\n");
+            return commitId;
+        }
+    
+    // generate commit object when commit
+    public static void generateCommit(String lastCommitId, String commitId, String message, String time) throws Exception {
+            Commit commit = new Commit(lastCommitId, commitId, message, time);
+            String sep = File.separator;
+            String content = commit.toString();
+            String curPath = System.getProperty("user.dir");
+            String objPath = MyUtil.getObjPath(curPath);
+            String hashText = MyUtil.getHashOfByteArray(content.getBytes());
+            File commitDir = new File(objPath + sep + hashText.substring(0, 2));
+            commitDir.mkdir();
+            File desfile = new File(commitDir + sep + hashText.substring(2, 40));
+    
+            try (
+                ObjectOutputStream output = 
+                new ObjectOutputStream(new FileOutputStream(desfile))
+            ) {
+                output.writeObject(commit);
+                System.out.println("DEBUG: Commit has been written down in objects directory \n");
+            } 
+        }
+
 
     /*-----------------------file\dir operating----------------------- */
 
     // delet all the files under a path, path should be absolute path
-    public static void deleteFile(String prePath) {
-        File preFile = new File(prePath);
+    public static void deleteFile(String curPath) {
+        File preFile = new File(curPath);
         File[] files = preFile.listFiles();
         for (File f : files) {
             if (f.isFile()) f.delete();
@@ -432,13 +550,13 @@ public class MyUtil {
     /*------------------path searching operations-------------------*/
 
     // get dotCorgitPath 
-    public static String getDotCorgitPath(String prePath) {
-        // System.out.println("prePath in getDotCorgitPath: " + prePath);#BUG
+    public static String getDotCorgitPath(String curPath) {
+        // System.out.println("curPath in getDotCorgitPath: " + curPath);#BUG
         String sep = File.separator;
         String res = new String();
-        File file = new File(prePath);
-        if (findDir(".corgit", prePath)) {
-            return (prePath + sep + ".corgit");
+        File file = new File(curPath);
+        if (findDir(".corgit", curPath)) {
+            return (curPath + sep + ".corgit");
         } else {
             res = getDotCorgitPath(file.getParent());
         }
@@ -449,18 +567,18 @@ public class MyUtil {
     }
 
     // get objects path
-    public static String getObjPath(String prePath) {
-        // System.out.println("prePath in getObjPath: " + prePath);
-        return getDotCorgitPath(prePath) + "/objects";
+    public static String getObjPath(String curPath) {
+        // System.out.println("curPath in getObjPath: " + curPath);
+        return getDotCorgitPath(curPath) + "/objects";
     }
 
     // get file's relative path to corgit repository
-    public static String getFileRelativePath(String fileName, String prePath) {
+    public static String getFileRelativePath(String fileName, String curPath) {
         String sep = File.separator;
-        String filePath = prePath + sep + fileName;
-        // because prepath is always exists, so getDotCorgit uses prepath
-        // System.out.println("pre path in getFileRP : " + prePath);#BUG
-        String dotCorgitPath = MyUtil.getDotCorgitPath(prePath);
+        String filePath = curPath + sep + fileName;
+        // because curPath is always exists, so getDotCorgit uses curPath
+        // System.out.println("pre path in getFileRP : " + curPath);#BUG
+        String dotCorgitPath = MyUtil.getDotCorgitPath(curPath);
         File dotCorgit = new File(dotCorgitPath);
         String rootPath = dotCorgit.getParent();
         // get relative path
@@ -469,25 +587,25 @@ public class MyUtil {
     }
 
     // get the root path of a corgit repository
-    public static String getRootPathOfCorigitRepo(String prePath) {
-        String dotCorgitPath = MyUtil.getDotCorgitPath(prePath);
+    public static String getRootPathOfCorigitRepo(String curPath) {
+        String dotCorgitPath = MyUtil.getDotCorgitPath(curPath);
         File dotCorgit = new File(dotCorgitPath);
         String rootPath = dotCorgit.getParent(); 
         return rootPath;
     }
 
     // get the path where index file exists
-    public static String getIndexFilePath(String prePath) {
+    public static String getIndexFilePath(String curPath) {
         String sep = File.separator;
-        String dotCorgitPath = MyUtil.getDotCorgitPath(prePath);
+        String dotCorgitPath = MyUtil.getDotCorgitPath(curPath);
         String indexPath = dotCorgitPath + sep + "index";
         return indexPath;
     }
 
     // get the path where HEAD file exsits
-    public static String getHeadFilePath(String prePath) {
+    public static String getHeadFilePath(String curPath) {
         String sep = File.separator;
-        String dotCorgitPath = MyUtil.getDotCorgitPath(prePath);
+        String dotCorgitPath = MyUtil.getDotCorgitPath(curPath);
         String headPath = dotCorgitPath + sep + "HEAD";
         return headPath;
     }
@@ -510,8 +628,33 @@ public class MyUtil {
     public static void printHelpDoc() {
         System.out.println("HELP: ");
         System.out.println("corgit init : init a local repository in present path.");
-        System.out.println("corgit add <filename> : add file to staging area.");
+        System.out.println("corgit add <filename> : add file to staged area.");
         System.out.println("corgit add . : add all the files under the path to staging area");
+        System.out.println("corgit add <dirname> : add dir to staging area.");
+        System.out.println("corgit commit -m <comment> : add the staged information to committed area.");
+        System.out.println("corgit ls-files --stage : print the content of index.");
+        System.out.println("corgit ls-head : show the commitID in HEAD file.");
+        System.out.println("corgit rm <filename> : delete file in both working space and staged area.");
+        System.out.println("corgit rm <dirname> : delete directory in both working space and staged area.");
+        System.out.println("corgit rm . : delete all the files/dirs under current working space and staged area.");
+        System.out.println("corgit rm --cached <filename> : delete the file in staged area.");
+        System.out.println("corgit rm --cached <dirname> : delete all the files under the dir in staged area.");
+        System.out.println("corgit rm --cached . : delete all the conten of staged area.");
+    }
+
+    // print args[]
+    public static String printArgs(String[] args) {
+        String res = "";
+        for (String arg : args) {
+            res += arg;
+            res += " ";
+        }
+        return res;
+    }
+
+    // note for wrong format instructions
+    public static void wrongFormat(String args[]) {
+        System.out.println("corgit: " + MyUtil.printArgs(args) + "is not a git command. See 'corgit --help' ");
     }
 
     /*---------------------------get length-------------------------- */
