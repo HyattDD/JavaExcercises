@@ -30,3 +30,6 @@
   - map the file
 
 #### kokit commit
+
+
+有一个比较大的bug没有解决，就是当找不到.corgit文件夹时会一层层向上找，但是会出问题

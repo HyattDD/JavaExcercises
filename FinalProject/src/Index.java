@@ -15,9 +15,16 @@ public class Index implements Serializable {
         this.indexMap.put(keyString, valueString);
     }
 
-    public void removeItem(String keyString) {
+    public boolean removeItem(String keyString) {
+        boolean remove = false;
+        remove = indexMap.containsKey(keyString);
         this.indexMap.remove(keyString);
-        // content.replace(getValue(keyString), "");
+        return remove;
+    }
+
+    public boolean removeDir() {
+        boolean remove = false;
+        return remove;
     }
 
     public String getValue(String keyString) {
@@ -68,6 +75,19 @@ public class Index implements Serializable {
         for (String key : keys) {
             if (key.contains(fileName)) {
                 contain = true;
+            }
+        }
+        return contain;
+    }
+
+    // count the number of a name exsits in index file
+    public int getAppearedTimes(String fileName) {
+        int contain = 0;
+        Set<String> set = indexMap.keySet();
+        String[] keys = set.toArray(new String[set.size()]);
+        for (String key : keys) {
+            if (key.contains(fileName)) {
+                contain += 1;
             }
         }
         return contain;

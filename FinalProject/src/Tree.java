@@ -12,6 +12,18 @@ public class Tree implements Serializable{
     private HashMap<String, String> treeMap = new HashMap<>();
 
 
+    public HashMap<String, String> getBlobMap() {
+        return blobMap;
+    }
+
+    public HashMap<String, String> getTreeMap() {
+        return treeMap;
+    }
+
+    public String getTreeId(String treeName) {
+        return treeMap.get(treeName);
+    }
+
     public String getTreeName() {
         return treeName;
     }
@@ -53,11 +65,13 @@ public class Tree implements Serializable{
         Arrays.sort(treeKeys);
         for (String key : blobKeys) {
             content += key;
-            content += blobMap.get(key);
+            content += " ";
+            content += blobMap.get(key) + '\n';
         }
         for (String key : treeKeys) {
             content += key;
-            content += treeMap.get(key);
+            content += " ";
+            content += treeMap.get(key) + '\n';
         }
         return content;
     }

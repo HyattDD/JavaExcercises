@@ -5,10 +5,12 @@ import java.io.ObjectInputStream;
 public class corgit {
     public static void main(String[] args) {
         String curPath = System.getProperty("user.dir");
-        // jump to different options
+        /* 
+        $ jump to different options, use length to ensure the format
+        */
         // corgit init
         if (args[0].equals("init") && args.length == 1) {
-            corgitInit();
+            corgitInit(curPath);
         // corgit add
         } else if (args[0].equals("add") && args.length == 2) {
             if (args[1].equals(".")) {
@@ -27,17 +29,23 @@ public class corgit {
         // corgit ls-head
         } else if (args[0].equals("ls-head") && args.length == 1) {
             corgitShowHead(curPath);
-        // corgit rm --cached / rm fileName /rm -r dir
+        // corgit rm 
         } else if (args[0].equals("rm")) {
-            if (args[1].equals("--cached") && 
-            (args.length == 3)) {
-                corgitRmCache(args[2], curPath);
-            } else if (args[1].equals("-r") && 
-            (args.length == 3)) {
-                corgitRmDir(args[2], curPath);
-            } else if (args.length == 2 &&
-            !args[1].equals("--cached") && !args[1].equals("-r"))
-             corgitRmFile(args[1], curPath);
+            // corgit rm --cached
+            if (args[1].equals("--cached")) {
+                // two sides: rm --cached fileName ; rm --cached dirName
+                if (args.length == 3) {
+                    corgitRmCache(args[2], curPath, "file");
+                } else if ((args.length == 4) && (args[2].equals("-r"))) {
+                    corgitRmCache(args[3], curPath, "dir");
+                }
+            // corgit rm -r
+            } else if (args.length == 3 && args[1].equals("-r")) {
+                corgitRm(args[2], curPath, "dir");
+            } else if (args.length == 2 ) {
+                corgitRm(args[1], curPath, "file");
+            }
+            // wrong rm format
              else MyUtil.wrongFormat(args);
         // corgit log
         } else if (args[0].equals("log") && args.length == 1) {
@@ -50,7 +58,7 @@ public class corgit {
     }
 
     // corgit init
-    public static boolean corgitInit() {
+    public static boolean corgitInit(String curPath) {
         boolean initSuccess = false;
         /* 
         check whether in .corgit path 
@@ -59,7 +67,7 @@ public class corgit {
             - if yes, reinitialized and make dir .corgit clean
             - if not, initialized
         */ 
-        if (MyUtil.checkPathInDotCorgit()) {
+        if (MyUtil.checkPathInDotCorgit(curPath)) {
             return initSuccess;
         } else return MyUtil.initCorgit();
     }
@@ -68,10 +76,8 @@ public class corgit {
     // corgit add
     public static boolean corgitAdd(String fileName, String curPath) {
         // check initialized
-        if (!MyUtil.checkInitialized(curPath)) {
-            System.out.println("fatal: not a corgit repository (or any of the parent directories): .git");
-            return false;
-        }
+        if (MyUtil.notInitialized(curPath)) return false;
+        // add
         boolean addSuccess = false;
         String sep = File.separator;
         String filePath = curPath + sep +fileName;
@@ -86,7 +92,7 @@ public class corgit {
         } else if (!file.exists()) {//#TODO
             // notice: since file does not exsit, filePath may not be a real path
             if (MyUtil.checkFileInIndex(fileName, curPath)) {
-                addSuccess = MyUtil.removeFileInIndex(fileName, curPath);
+                addSuccess = MyUtil.deleteToIndex(fileName, curPath);
                 addSuccess = MyUtil.removeFileDeletedInIndex(curPath + sep + fileName);
             } else {
                 System.out.println("fatal: pathspec '" + 
@@ -97,6 +103,9 @@ public class corgit {
     }
 
     public static boolean corgitAddAll(String curPath) {
+        // check initialized
+        if (MyUtil.notInitialized(curPath)) return false;
+        // add all
         boolean addSuccess = false;
         String sep = File.separator;
         File preDir = new File(curPath);
@@ -120,10 +129,7 @@ public class corgit {
     // corgit commit (-m "notes")
     public static boolean corgitCommit(String opString01, String opString02, String curPath) {
         // check initialized
-        if (!MyUtil.checkInitialized(curPath)) {
-            System.out.println("fatal: not a corgit repository (or any of the parent directories): .git");
-            return false;
-        }
+        if (MyUtil.notInitialized(curPath)) return false;
         // check input format
         if (!opString01.equals("-m")) {
             System.out.println("use 'corgit commit -m ···' and try again.");
@@ -138,14 +144,17 @@ public class corgit {
             Head head = (Head) ois.readObject();
 
             String lastCommitId = head.getCommitId();
-            String commitId = MyUtil.generateTree();
+            String treeId = MyUtil.generateTree();
+            // System.out.println("corgitCommit : treeId: " + treeId);
+            String commitId = MyUtil.getHashOfByteArray(treeId.getBytes());
             String message = opString02;
             String time = String.valueOf(System.currentTimeMillis());
 
             // update headFile
             commitSuccess = MyUtil.updateHead(commitId);
-            MyUtil.generateCommit(lastCommitId, commitId, message, time);
+            MyUtil.generateCommit(lastCommitId, commitId, treeId, message, time);
             ois.close();
+
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -163,6 +172,8 @@ public class corgit {
 
     // corgit ls-files --staged
     public static void corgitListIndex(String curPath) {
+        // check initialized
+        if (MyUtil.notInitialized(curPath)) return;
         try {
             MyUtil.showIndex(curPath);
         } catch (Exception e) {
@@ -172,33 +183,77 @@ public class corgit {
 
     // print the content of head
     public static void corgitShowHead(String curPath) {
-        try {
-            MyUtil.showHead(curPath);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        // check initialized
+        if (MyUtil.notInitialized(curPath)) return;
+        MyUtil.showHead(curPath, true);
     }
 
     // delete file information in staged area
-    public static void corgitRmCache(String fileName, String curPath) {
-        if (fileName.equals(null)) {
-            corgitHelp();
-            return;
+    public static boolean corgitRmCache(String fileName, String curPath, String type) {
+        boolean removeSuccess = false;
+        // check initialized
+        if (MyUtil.notInitialized(curPath)) return removeSuccess;
+        // we don't care about whether the file exists in working space
+        if (type.equals("file")) {
+            if (!MyUtil.checkFileInIndex(fileName, curPath)) {
+                if (MyUtil.getNameAppearedTimesInIndex(fileName, curPath) > 0) {
+                    System.out.println("fatal: not removing '" + fileName + "' recursively without -r");
+                    return removeSuccess;
+                } else {
+                    System.out.println("fatal: pathspec '" + fileName + "' did not match any files");
+                    return removeSuccess;
+                } 
+            } else {
+                removeSuccess = MyUtil.deleteToIndex(fileName, curPath);
+                if (removeSuccess) System.out.println("rm : " + MyUtil.getFileRelativePath(fileName, curPath));
+                // file not in index but filename appeared, then the file must be a dir
+            } 
         } else {
-            MyUtil.deleteToIndex(fileName, curPath);
+            // we can also use "-r" to delete file item in index
+            if (MyUtil.checkFileInIndex(fileName, curPath)) {
+                removeSuccess = MyUtil.deleteToIndex(fileName, curPath);
+                if (removeSuccess) System.out.println("rm : " + MyUtil.getFileRelativePath(fileName, curPath));
+                return removeSuccess;
+            } else if (MyUtil.getNameAppearedTimesInIndex(fileName, curPath) > 0) {
+                removeSuccess = MyUtil.removeNameContainsInIndex(fileName, curPath);
+            } else {
+                System.out.println("fatal: pathspec '" + fileName + "' did not match any files");
+            }
+        }        
+        return removeSuccess;
+    }
+
+    // delete file both from working space and staged area
+    public static boolean corgitRm(String fileName, String curPath, String type) {
+        boolean removeSuccess = false;
+        // check initialized
+        if (MyUtil.notInitialized(curPath)) return removeSuccess;
+        String sep = File.separator;
+        File file = new File(curPath + sep + fileName);
+
+        // file just mean that user use the command "rm filename" without "-r"
+        // maybe the filename is a dirname so we should judge it
+        if (type.equals("file")) {
+            if (file.exists()) {
+                if (file.isFile()) {
+                    file.delete();
+                    corgitRmCache(fileName, curPath, "file");
+                    removeSuccess = true;
+                } else {
+                    System.out.println("fatal: not removing '" + fileName + "' recursively without -r");
+                }
+            } else corgitRmCache(fileName, curPath, "file");
+        } else {
+            if (file.exists()) {
+                file.delete();
+                corgitRmCache(fileName, curPath, "dir");
+                removeSuccess = true;
+            } else corgitRmCache(fileName, curPath, "dir");
         }
+        return removeSuccess;
     }
 
-    //
-    public static void corgitRmFile(String fileName, String curPath) {
-
-    }
-    // 
-    public static void corgitRmDir(String dirName, String curPath) {
-
-    }
-
-    //
+    // print commit log
     public static void corgitLog(String curPath) {
         
     }
