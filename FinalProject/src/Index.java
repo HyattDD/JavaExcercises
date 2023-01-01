@@ -15,6 +15,10 @@ public class Index implements Serializable {
         this.indexMap.put(keyString, valueString);
     }
 
+    public void clearIndexMap() {
+        indexMap.clear();
+    }
+
     public boolean removeItem(String keyString) {
         boolean remove = false;
         remove = indexMap.containsKey(keyString);
@@ -22,16 +26,9 @@ public class Index implements Serializable {
         return remove;
     }
 
-    public boolean removeDir() {
-        boolean remove = false;
-        return remove;
-    }
-
     public String getValue(String keyString) {
         return this.indexMap.get(keyString);
     }
-
-
 
     public HashMap<String, String> getMap() {
         return this.indexMap;

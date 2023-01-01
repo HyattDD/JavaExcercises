@@ -55,5 +55,14 @@ public class Commit implements Serializable{
         return this.lastCommitId + this.treeId +this.message + this.time;
     }
 
-    
+
+    // print commit info while using corgit log
+    public void printLog() {
+        System.out.println("***************************************************");
+        System.out.println("commitId : " + commitId);
+        System.out.println("Message: " + message);
+        System.out.println("Time: " + time);
+        System.out.println("***************************************************");
+    }
+
 }

@@ -36,7 +36,6 @@ public class Tree implements Serializable{
         return MyUtil.getHashOfByteArray(this.toString().getBytes());
     }
 
-
     // when the dir has some subfiles in, it's tree stores it by adding to blobMap
     public boolean addBlob(String fileName, String hashText) {
         boolean addSuccess = false;

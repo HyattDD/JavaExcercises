@@ -112,11 +112,7 @@ public class MTreeNode {
     }
 
     /**
-     * 后序遍历：左右根
-     * 利用栈模拟递归调用
-     * 将根结点压入栈中，当栈不空时执行：
-     * 弹出栈中结点，将其头插放入结果队列中
-     * 将该结点的孩子依次放入栈中
+     * post travel
      */
 
     public LinkedList<MTreeNode> postOrder() {
@@ -130,9 +126,6 @@ public class MTreeNode {
         }
         return post;
     }
-
-    
-
 }
 
 

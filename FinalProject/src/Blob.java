@@ -23,6 +23,11 @@ public class Blob implements Serializable {
         this.hashValueOfFileContent = MyUtil.getHashOfByteArray(content);
     }
 
+    // get the blob content
+    public byte[] getContent() {
+        return this.content;
+    }
+
     // print the content of origin file content
     public void printContent() {
         System.out.println(this.content.toString());

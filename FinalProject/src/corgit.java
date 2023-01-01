@@ -1,6 +1,4 @@
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.ObjectInputStream;
 
 public class corgit {
     public static void main(String[] args) {
@@ -50,6 +48,14 @@ public class corgit {
         // corgit log
         } else if (args[0].equals("log") && args.length == 1) {
             corgitLog(curPath);
+        // corgit reset
+        } else if (args[0].equals("reset") && args.length == 3) {
+            corgitReset(args[1], args[2], curPath);
+        // corgit push
+        } else if (args[0].equals("push") && args.length == 1) {
+            corgitPush(curPath);
+        } else if (args[0].equals("pull") && args.length == 1) {
+            corgitPull(curPath);
         }
         // wrong instruction, show help
         else {
@@ -137,33 +143,21 @@ public class corgit {
         boolean commitSuccess = false;
         try {
             // do commit, read Head file and change it 
-            String headPath = MyUtil.getHeadFilePath(curPath);
-            FileInputStream fis = new FileInputStream(headPath);
-            // System.out.println(headPath);
-            ObjectInputStream ois = new ObjectInputStream(fis);
-            Head head = (Head) ois.readObject();
-
+            Head head = (Head) MyUtil.readHead(curPath);
             String lastCommitId = head.getCommitId();
             String treeId = MyUtil.generateTree();
             // System.out.println("corgitCommit : treeId: " + treeId);
             String commitId = MyUtil.getHashOfByteArray(treeId.getBytes());
             String message = opString02;
-            String time = String.valueOf(System.currentTimeMillis());
-
+            String time = MyUtil.getTime();
             // update headFile
             commitSuccess = MyUtil.updateHead(commitId);
             MyUtil.generateCommit(lastCommitId, commitId, treeId, message, time);
-            ois.close();
-
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println("fail to commit this time");
         }
-
         return commitSuccess;
     }
-
-
-
 
     // corgit --help
     public static void corgitHelp() {
@@ -177,7 +171,7 @@ public class corgit {
         try {
             MyUtil.showIndex(curPath);
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println("fail to get the content of index");
         }
     }
 
@@ -230,7 +224,6 @@ public class corgit {
         if (MyUtil.notInitialized(curPath)) return removeSuccess;
         String sep = File.separator;
         File file = new File(curPath + sep + fileName);
-
         // file just mean that user use the command "rm filename" without "-r"
         // maybe the filename is a dirname so we should judge it
         if (type.equals("file")) {
@@ -254,8 +247,102 @@ public class corgit {
     }
 
     // print commit log
-    public static void corgitLog(String curPath) {
-        
+    public static boolean corgitLog(String curPath) {
+        boolean logSuccess = false;
+        // check initialized
+        if (MyUtil.notInitialized(curPath)) return logSuccess;
+        Log log = new Log();
+        if (log.getOriginHeadContent().isEmpty()) {
+            System.out.println("fatal: your current repo does not have any commits yet");
+            return logSuccess;
+        } else {
+            logSuccess = log.log(curPath, true);
+        }
+        return logSuccess;
     }
 
+
+    // corgit push
+    public static boolean corgitPush(String curPath) {
+        boolean pushSuccess = false;
+        // check initialized
+        if (MyUtil.notInitialized(curPath)) return pushSuccess;
+        System.out.println("[Default] Push will mkdirs by relative path'../remoteRepo' of your working space");
+        String sep = File.separator;
+        File workingSpace = new File(curPath);
+        String remoteRepoPath = workingSpace.getParent() + sep + "remoteRepo";
+        File remoteRepo = new File(remoteRepoPath);
+        remoteRepo.mkdirs();
+        int count = 0;
+        try {
+            count = ZipUtil.doZip(curPath, "push.zip");
+            MyServer myServer = new MyServer(remoteRepoPath + sep + "push.zip");
+            MyClient myClient = new MyClient(curPath + sep + "push.zip");
+            Thread serverThread = new Thread(myServer);
+            Thread clientThread = new Thread(myClient);
+            serverThread.start();
+            clientThread.start();
+            // to ensure that the threads all finished
+            serverThread.join();
+            clientThread.join();
+        } catch (Exception e) {
+            System.out.println("Sorry, corgit failed while pushing");
+            return pushSuccess;
+        } 
+        File pushFile = new File(curPath + sep + "push.zip");
+        pushFile.delete();
+        System.out.println(count + " files were packed in total");
+        System.out.println("[Default] Push done.");
+        pushSuccess = true;
+        return pushSuccess;
+    }
+
+    // corgit pull
+    public static boolean corgitPull(String curPath) {
+        boolean pullSuccess = false;
+        // check initialized
+        if (MyUtil.notInitialized(curPath)) return pullSuccess;
+        System.out.println("[Default] Pull will get files from relative path'../remoteRepo' of your working space");
+        String sep = File.separator;
+        File workingSpace = new File(curPath);
+        String remoteRepoPath = workingSpace.getParent() + sep + "remoteRepo";
+        File remotePushFile = new File(remoteRepoPath + sep + "push.zip");
+        int count = 0;
+        if (!remotePushFile.exists()) {
+            System.out.println("No commit in remote repository, try push");
+            return pullSuccess;
+        }
+        try {
+            // now server is in local working space, client is remote repo
+            MyServer myServer = new MyServer(curPath + sep + "pull.zip");
+            MyClient myClient = new MyClient(remotePushFile.getAbsolutePath());
+            Thread serverThread = new Thread(myServer);
+            Thread clientThread = new Thread(myClient);
+            serverThread.start();
+            clientThread.start();
+            serverThread.join();
+            clientThread.join();
+        } catch (Exception e) {
+            System.out.println("Sorry, corgit failed while pulling");
+            return pullSuccess;
+        }
+        System.out.println("unzipping pulled file..."); 
+        count = ZipUtil.unzip(curPath, "pull.zip"); 
+        File pullFile = new File(curPath + sep + "pull.zip");
+        pullFile.delete();
+        System.out.println(count + " files were unpacked in total");
+        System.out.println("[Default] Pull done.");
+        pullSuccess = true;
+        return pullSuccess;
+    }
+
+
+    public static boolean corgitReset(String optionStr, String commitId, String curPath) {
+        boolean resetSuccess = false;
+        Reset reset = new Reset(commitId);
+        if (optionStr.equals("--soft")) reset.resetSoft(curPath);
+        if (optionStr.equals("--mixed")) reset.resetMixed(curPath);
+        if (optionStr.equals("--hard")) reset.resetHard(curPath);
+        return resetSuccess;
+    }
 }

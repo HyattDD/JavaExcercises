@@ -8,12 +8,16 @@ import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.security.MessageDigest;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Scanner;
 import java.util.Set;
+
+
 
 public class MyUtil {
 
@@ -86,7 +90,6 @@ public class MyUtil {
                 output.writeObject(index);
                 // init success only when all files and dirs are made
             } catch (IOException e) {
-                e.printStackTrace();
                 System.out.println("Fualts were made when index file is creating.");
             }
             try (
@@ -97,7 +100,6 @@ public class MyUtil {
                 output.writeObject(head);
                 initSuccess = true;
             } catch (Exception e) {
-                e.printStackTrace();
                 System.out.println("Faults were made when head file is creating.");
             }
             // if init success, print out notes
@@ -121,7 +123,7 @@ public class MyUtil {
                 // write empty index file 
                 output.writeObject(index);
             } catch (IOException e) {
-                e.printStackTrace();
+                System.out.println("Faults were made while reinitializing");
             }
             try (
                 ObjectOutputStream output = 
@@ -131,7 +133,6 @@ public class MyUtil {
                 output.writeObject(head);
                 initSuccess = true;
             } catch (Exception e) {
-                e.printStackTrace();
                 System.out.println("Faults were made when head file is creating.");
             }
             if (initSuccess) {
@@ -251,7 +252,7 @@ public class MyUtil {
                 System.out.println(head.getCommitId());
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println("fail to read the head file");
         }
         return res;
     }
@@ -319,7 +320,7 @@ public class MyUtil {
 
             addSuccess = true;
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println("failed to modify index");
         }
 
         return addSuccess;
@@ -343,7 +344,7 @@ public class MyUtil {
         return updateHead;
     }
 
-    public static Boolean generateBlob(String fileName, String curPath) {
+    public static boolean generateBlob(String fileName, String curPath) {
         boolean genSuccess = false;
         String sep = File.separator;
         String filePath = curPath + sep + fileName;
@@ -388,10 +389,7 @@ public class MyUtil {
         String[] indexItems = index.getKeys();
         MTreeNode root = buildMTree(indexItems);
         LinkedList<MTreeNode> postList = root.postOrder();
-        //BUG hashvalue 这里是空，因为还没设置
-        // for (MTreeNode item : postList) {
-        //     System.out.println("item is : " + item.getNodeName() + "; item's index name is " + item.getIndexName(item) + "; item's parent's name is " + item.getParent().getNodeName());
-        // }
+        //BUG hashvalue is empty now, since that it has not been set down
         for (MTreeNode node: postList) {
             if (node.isLeaf()) {
                 // ensure that all blob node has hashValue
@@ -403,7 +401,11 @@ public class MyUtil {
                 String blobHashTexts = new String();
                 for (MTreeNode child : children) {
                     blobHashTexts += child.getHashValue();
-                    tree.addBlob(child.getNodeName(), child.getHashValue());
+                    if (child.isLeaf()) {
+                        tree.addBlob(child.getIndexName(child), child.getHashValue());
+                    } else {
+                        tree.addTree(child.getNodeName(), child.getHashValue());
+                    }
                 }
                 String treeHash = getHashOfByteArray(blobHashTexts.getBytes());
                 tree.setTreeName(treeHash);
@@ -508,7 +510,7 @@ public class MyUtil {
         // and what are modified
         for (String fileName : curCommitFileNames) {
             //BUG
-            System.out.println(fileName);
+            // System.out.println("[Debug] printCommitChange " + fileName);
             String hashValue = curCommitMap.get(fileName);
             if (lastCommitMap.containsKey(fileName)) {
                 if (!lastCommitMap.get(fileName).equals(hashValue)) {
@@ -569,7 +571,8 @@ public class MyUtil {
             rootTreeId = commit.getTreeId();
             ois.close();
         } catch (Exception e) {
-            e.printStackTrace();
+            // e.printStackTrace();
+            System.out.println("fail to read commit");
         }
         commitMap = readTree(rootTreeId);
         // System.out.println("readCommit-> : rootTreeId : " + rootTreeId);
@@ -584,27 +587,82 @@ public class MyUtil {
         String treePath = getObjPath(curPath) + 
         sep + treeId.substring(0, 2) +
         sep +  treeId.substring(2, 40);
-        System.out.println("readTree->treePath : " + treePath);
+        // System.out.println("[Debug] readTree->rootTreePath : " + treePath);
         try {
             FileInputStream fis = new FileInputStream(treePath);
             ObjectInputStream ois = new ObjectInputStream(fis);
             Tree tree = (Tree) ois.readObject();
-            System.out.println(tree.toString());
+            // System.out.println("[Debug] tree.tostring : " + tree.toString());
             treeMap.putAll(tree.getBlobMap());
-            if (!tree.getTreeMap().isEmpty()) {
+            if (!tree.getTreeMap().isEmpty()) { 
                 Set<String> set = tree.getTreeMap().keySet();
                 String[] keys = set.toArray(new String[set.size()]);
                 for (String key : keys) {
-                    System.out.println("sub trees: " + key);
-                    System.out.println(tree.getTreeId(key));
+                    // System.out.println("[Debug] sub trees: " + key);
+                    // System.out.println("[Debug]" + tree.getTreeId(key));
                     treeMap.putAll(readTree(tree.getTreeId(key)));
                 }
             }
             ois.close();
         } catch (Exception e) {
-            e.printStackTrace();
+            // e.printStackTrace();
+            System.out.println("fail to read root tree");
         }
         return treeMap;
+    }
+
+    // return the HEAD object
+    public static Head readHead(String curPath) {
+        String sep = File.separator;
+        String headPath = getDotCorgitPath(curPath) + sep + "HEAD";
+        File headFile = new File(headPath);
+        Head head = (Head) readObject(headFile);
+        return head;
+    }
+
+    // read blob file and return a blob object
+    public static Blob readBlob(String blobId) {
+        String curPath = System.getProperty("user.dir");
+        String sep = File.separator;
+        String blobPath = getObjPath(curPath) + sep + blobId.substring(0, 2) + sep + blobId.substring(2, 40);
+        File blobFile = new File(blobPath);
+        return (Blob) readObject(blobFile);
+    }
+
+    // read all kinds of objects, remember to use cast to get your Object type
+    public static Object readObject(File file) {
+        Object object = new Object();
+        try (
+            FileInputStream fis = new FileInputStream(file);
+            ObjectInputStream ois = new ObjectInputStream(fis);
+        ) {
+            object = ois.readObject();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return object;
+    }
+
+    // write bytes to file
+    public static void writeBytesToFile(byte[] content, File file) {
+        try (
+            FileOutputStream fos = new FileOutputStream(file);
+        ) {
+            fos.write(content);
+        } catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+
+    public static void writeObject(File file, Object object) {
+        try (
+            FileOutputStream fos = new FileOutputStream(file);
+            ObjectOutputStream oos = new ObjectOutputStream(fos);
+        ) {
+            oos.writeObject(object);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
 
@@ -623,8 +681,29 @@ public class MyUtil {
         }
     }
 
+    // given the index items, create files
+    public static void createFile(File file) {
+        if (file.exists()) {
+            System.out.println("File exists");
+        } else {
+            System.out.println("File not exists, create it ...");
+            //getParentFile() 获取上级目录(包含文件名时无法直接创建目录的)
+            if (!file.getParentFile().exists()) {
+                System.out.println("[Debug]Parent dir of " + file.getName() +"not exists");
+                //创建上级目录
+                file.getParentFile().mkdirs();
+            }
+            try {
+                //在上级目录里创建文件
+                file.createNewFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
     // check whether a file is under present path, recursively
-    public static Boolean findFile(String fileName, String path) {
+    public static boolean findFile(String fileName, String path) {
         String sep = File.separator;
         boolean find = false;
         File dir = new File(path);
@@ -675,7 +754,7 @@ public class MyUtil {
     }
 
     // check whether a dir exists in present path, recursively
-    public static Boolean findDir(String dirName, String path) {
+    public static boolean findDir(String dirName, String path) {
         // System.out.println("find dir in :" + path); #BUG
         boolean find = false;
         File dir = new File(path);
@@ -699,6 +778,26 @@ public class MyUtil {
             return find;
         }
         return find;
+    }
+
+    public static boolean clearWorkingSpace(String curPath) {
+        boolean clear = false;
+        String workingSpacePath = getRootPathOfCorigitRepo(curPath);
+        File directory = new File(workingSpacePath);
+
+        // 获取该路径下的所有文件和文件夹
+        File[] files = directory.listFiles();
+        // 遍历文件和文件夹数组，并删除每个文件和文件夹
+        for (File file : files) {
+            if (file.getName().equals(".corgit") && file.isDirectory()) {
+                continue;
+            }
+            if (!file.delete()) {
+                System.out.println("Failed to delete " + file);
+            }
+        }
+        clear = true;
+        return clear;
     }
 
     /*------------------generate hashvalue SHA-1------------------- */
@@ -832,6 +931,13 @@ public class MyUtil {
         );
     }
 
+    public static String getTime() {
+        LocalDateTime now = LocalDateTime.now();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        String time = now.format(formatter);
+        return time;
+    }
+
     /*-------------------------corgit help--------------------------- */
     public static void printHelpDoc() {
         System.out.println("HELP: ");
@@ -848,6 +954,10 @@ public class MyUtil {
         System.out.println("corgit rm --cached <filename> : delete the file in staged area.");
         System.out.println("corgit rm --cached <dirname> : delete all the files under the dir in staged area.");
         System.out.println("corgit rm --cached . : delete all the conten of staged area.");
+        System.out.println("corgit log : print the commit history");
+        System.out.println("corgit reset : reset the repo to a certain version, use option : --soft, --mixed, --hard");
+        System.out.println("corgit push : pack the file under working space and send the zip file to ../remoteRepo");
+        System.out.println("corgit pull : pull the zip file in the ../remoteRepo and overlay the working space with the unzipped files");
     }
 
     // print args[]
